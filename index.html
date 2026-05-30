@@ -2,8 +2,13 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Omi &amp; Opa – Gemeinsam füreinander</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Omi &amp; Opa">
+<meta name="theme-color" content="#2C2416">
+<meta name="mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,600;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root{--cream:#FAF7F2;--warm:#F0E9DC;--sage:#7A9E87;--sage-dark:#5A7D67;--terracotta:#C4694F;--sand:#D4B896;--ink:#2C2416;--muted:#8C7B6B;--border:#E8DDD0;--done-bg:#EEF5F0;--done-text:#8C7B6B;}
@@ -185,6 +190,76 @@ main{padding:13px 13px 100px;max-width:480px;margin:0 auto;}
 .tr-chip{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);background:white;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s;}
 .tr-chip.active{border-color:#4060B0;background:#4060B0;color:white;}
 .tr-chip:hover:not(.active){border-color:#4060B0;color:#4060B0;}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 480px) {
+  header { padding: 10px 12px 8px; }
+  .logo { font-size: 20px; }
+  main { padding: 10px 10px 90px; }
+  .add-card { padding: 12px; }
+  .field input, .field select, .field textarea { font-size: 16px; } /* prevent zoom on iOS */
+  .field-row { grid-template-columns: 1fr; gap: 0; }
+  .recur-options { gap: 5px; }
+  .recur-chip { font-size: 11px; padding: 4px 8px; }
+  .task-card { padding: 10px; gap: 8px; }
+  .task-title { font-size: 13px; }
+  .badge { font-size: 10px; padding: 2px 6px; }
+  .cal-cell { min-height: 38px; }
+  .cal-date-num { font-size: 10px; width: 18px; height: 18px; }
+  .cal-dot { width: 4px; height: 4px; }
+  .modal { padding: 18px 14px 28px; }
+  .modal h3 { font-size: 17px; }
+  .confirm-box { padding: 20px 16px; }
+  .confirm-box h4 { font-size: 16px; }
+  .setup-box { padding: 20px 18px; }
+  .logo-big { font-size: 28px; }
+  .filter-row { padding: 6px 10px; gap: 5px; }
+  .filter-chip { font-size: 11px; padding: 4px 9px; }
+  .tab { padding: 9px 10px; font-size: 12px; }
+  .timerange-bar { padding: 6px 10px; flex-wrap: wrap; gap: 5px; }
+  .tr-chip { font-size: 11px; padding: 4px 9px; }
+  .add-task-btn, .edit-save-btn { font-size: 14px; padding: 11px; }
+  .cal-event-item { padding: 7px 8px; }
+  .cal-event-title { font-size: 12px; }
+  .cal-event-meta { font-size: 10px; }
+  .section-title { font-size: 10px; }
+  .no-tasks-msg { font-size: 13px; padding: 24px 16px; }
+  .edit-modal { padding: 16px 14px 30px; }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  main { max-width: 100%; padding: 14px 14px 90px; }
+  .field input, .field select, .field textarea { font-size: 16px; }
+}
+
+@media (min-width: 769px) {
+  body { background: #E8E0D5; }
+  header { max-width: 100%; }
+  .tabs, .filter-section, .timerange-bar { max-width: 100%; }
+  main { max-width: 560px; margin: 0 auto; }
+  .modal, .edit-modal { max-width: 520px; border-radius: 20px; margin: auto; bottom: auto; top: 50%; transform: translateY(-50%); }
+  .modal-overlay, .edit-modal-overlay { align-items: center; }
+  .confirm-box { max-width: 340px; }
+  .setup-box { max-width: 360px; }
+}
+
+/* iOS safe area */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  main { padding-bottom: calc(90px + env(safe-area-inset-bottom)); }
+  header { padding-top: calc(13px + env(safe-area-inset-top)); }
+}
+
+/* Touch targets */
+.check-btn, .task-action-btn, .tab, .filter-chip, .recur-chip, .tr-chip {
+  min-height: 36px;
+  min-width: 36px;
+}
+.task-action-btn { min-width: 28px; min-height: 28px; display: flex; align-items: center; justify-content: center; }
+
+/* Smooth scrolling */
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+* { -webkit-tap-highlight-color: transparent; }
+
 </style>
 
 <!-- Firebase SDK -->
@@ -236,7 +311,8 @@ window.addEventListener('firebaseReady', () => {
     <div class="tagline">Gemeinsam füreinander sorgen</div>
 
     <label>Dein Name</label>
-    <input type="text" id="myNameInput" placeholder="Dein Vorname" maxlength="20">
+    <input type="text" id="myNameInput" placeholder="Dein Vorname" maxlength="20" list="setupWhoList" autocomplete="off">
+    <datalist id="setupWhoList"></datalist>
     <button class="setup-go-btn" id="setupGoBtn" disabled onclick="startApp()">Starten →</button>
   </div>
 </div>
@@ -477,6 +553,14 @@ window.addEventListener('DOMContentLoaded',()=>{
   const sp=localStorage.getItem('pk_patient'),sm=localStorage.getItem('pk_myname');
   if(sp&&sm){patientName=sp;myName=sm;document.getElementById('setupScreen').style.display='none';showApp();}
   document.getElementById('taskDate').value=todayStr();
+  // Populate setup name datalist from saved tasks
+  const savedTasks = localStorage.getItem('pk_tasks');
+  if (savedTasks) {
+    const t = JSON.parse(savedTasks);
+    const people = [...new Set(t.filter(x=>x.who).map(x=>x.who))].sort();
+    const dl = document.getElementById('setupWhoList');
+    if (dl) dl.innerHTML = people.map(p=>`<option value="${p}">`).join('');
+  }
 });
 
 function saveTasks(){localStorage.setItem('pk_tasks',JSON.stringify(tasks));}
@@ -557,6 +641,14 @@ function addTask(){
   document.getElementById('taskTime').value='';
   document.getElementById('taskCat').value='sonstiges';
   document.getElementById('taskDate').value=todayStr();
+  // Populate setup name datalist from saved tasks
+  const savedTasks = localStorage.getItem('pk_tasks');
+  if (savedTasks) {
+    const t = JSON.parse(savedTasks);
+    const people = [...new Set(t.filter(x=>x.who).map(x=>x.who))].sort();
+    const dl = document.getElementById('setupWhoList');
+    if (dl) dl.innerHTML = people.map(p=>`<option value="${p}">`).join('');
+  }
   document.querySelectorAll('.recur-chip').forEach(c=>c.classList.remove('selected'));
   document.querySelector('.recur-chip[data-val="none"]').classList.add('selected');
   selectedRecur='none';
