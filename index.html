@@ -191,6 +191,22 @@ main{padding:13px 13px 100px;max-width:480px;margin:0 auto;}
 .tr-chip.active{border-color:#4060B0;background:#4060B0;color:white;}
 .tr-chip:hover:not(.active){border-color:#4060B0;color:#4060B0;}
 
+
+/* CHIP RESPONSIVE TEXT */
+.chip-text { display: inline; }
+@media (max-width: 480px) {
+  .filter-row { gap: 5px; flex-wrap: wrap; }
+  .filter-chip { padding: 6px 8px; font-size: 16px; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; }
+  .chip-text { display: none; }
+  .chip-emoji { font-size: 18px; }
+  /* Show "Alle" text always */
+  .filter-chip:first-of-type .chip-text { display: inline; font-size: 12px; }
+  .filter-chip:first-of-type { font-size: 12px; }
+  /* Timerange bar wrap on mobile */
+  .timerange-bar { flex-wrap: wrap; }
+  .tr-chip { font-size: 11px; padding: 5px 8px; }
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 480px) {
   header { padding: 10px 12px 8px; }
@@ -390,7 +406,17 @@ window.addEventListener('firebaseReady', () => {
 <div class="filter-section" id="filterSection" style="display:none">
   <div class="filter-row" id="catFilterRow">
     <span class="filter-label">Kat:</span>
-    <div class="filter-chip active" onclick="setFilter('cat','alle',this)">Alle</div>
+    <div class="filter-chip active" onclick="setFilter('cat','alle',this)"><span class="chip-emoji">✅</span><span class="chip-text"> Alle</span></div>
+    <div class="filter-chip" onclick="setFilter('cat','arzt',this)"><span class="chip-emoji">🏥</span><span class="chip-text"> Arzt</span></div>
+    <div class="filter-chip" onclick="setFilter('cat','haushalt',this)"><span class="chip-emoji">🏠</span><span class="chip-text"> Haushalt</span></div>
+    <div class="filter-chip" onclick="setFilter('cat','einkauf',this)"><span class="chip-emoji">🛒</span><span class="chip-text"> Einkauf</span></div>
+    <div class="filter-chip" onclick="setFilter('cat','medikamente',this)"><span class="chip-emoji">💊</span><span class="chip-text"> Medikamente</span></div>
+    <div class="filter-chip" onclick="setFilter('cat','besuch',this)"><span class="chip-emoji">💛</span><span class="chip-text"> Besuch</span></div>
+    <div class="filter-chip" onclick="setFilter('cat','schwimmbad',this)"><span class="chip-emoji">🏊</span><span class="chip-text"> Schwimmbad</span></div>
+    <div class="filter-chip" onclick="setFilter('cat','behörden',this)"><span class="chip-emoji">📋</span><span class="chip-text"> Behörden</span></div>
+    <div class="filter-chip" onclick="setFilter('cat','coiffeur',this)"><span class="chip-emoji">✂️</span><span class="chip-text"> Coiffeur</span></div>
+    <div class="filter-chip" onclick="setFilter('cat','sonstiges',this)"><span class="chip-emoji">🔖</span><span class="chip-text"> Sonstiges</span></div>
+  </div>
     <div class="filter-chip" onclick="setFilter('cat','arzt',this)">🏥 Arzt</div>
     <div class="filter-chip" onclick="setFilter('cat','haushalt',this)">🏠 Haushalt</div>
     <div class="filter-chip" onclick="setFilter('cat','einkauf',this)">🛒 Einkauf</div>
