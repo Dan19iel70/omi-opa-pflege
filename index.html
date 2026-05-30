@@ -233,8 +233,7 @@ window.addEventListener('firebaseReady', () => {
   <div class="setup-box">
     <div class="logo-big">Omi &amp; <span>Opa</span></div>
     <div class="tagline">Gemeinsam füreinander sorgen</div>
-    <label>Für wen pflegst du?</label>
-    <input type="text" id="patientNameInput" placeholder="z.B. Mama, Oma Ida…" maxlength="30">
+
     <label>Dein Name</label>
     <input type="text" id="myNameInput" placeholder="Dein Vorname" maxlength="20">
     <button class="setup-go-btn" id="setupGoBtn" disabled onclick="startApp()">Starten →</button>
@@ -433,17 +432,15 @@ const CAT_COLORS={arzt:'#E87070',haushalt:'#6EA86E',einkauf:'#E0A030',medikament
 const RECUR_FIXED={daily:1,weekly:7,biweekly:14,monthly:30};
 
 // SETUP
-document.getElementById('patientNameInput').addEventListener('input',checkSetup);
 document.getElementById('myNameInput').addEventListener('input',checkSetup);
 function checkSetup(){
-  const p=document.getElementById('patientNameInput').value.trim();
   const m=document.getElementById('myNameInput').value.trim();
-  document.getElementById('setupGoBtn').disabled=!(p&&m);
+  document.getElementById('setupGoBtn').disabled=!m;
 }
 function startApp(){
-  patientName=document.getElementById('patientNameInput').value.trim();
+  patientName='Omi & Opa';
   myName=document.getElementById('myNameInput').value.trim();
-  if(!patientName||!myName)return;
+  if(!myName)return;
   localStorage.setItem('pk_patient',patientName);
   localStorage.setItem('pk_myname',myName);
   document.getElementById('setupScreen').style.display='none';
