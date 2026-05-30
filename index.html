@@ -347,7 +347,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 <div class="tabs" id="mainTabs" style="display:none">
   <div class="tab active" onclick="setTab('offen',this)">Offen</div>
   <div class="tab" onclick="setTab('kalender',this)">🗓 Kalender</div>
-  <div class="tab" onclick="setTab('wiederkehrend',this)">🔁 Wiederkehrend</div>
+  <div class="tab" onclick="setTab('wiederkehrend',this)">🔁 Vorlagen</div>
   <div class="tab" onclick="setTab('erledigt',this)">Erledigt</div>
 </div>
 
@@ -373,6 +373,13 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 </div>
 
 <!-- MAIN -->
+<div class="timerange-bar" id="timerangeBar" style="display:none">
+  <div class="tr-chip active" onclick="setRange('alle',this)">Alle</div>
+  <div class="tr-chip" onclick="setRange('week',this)">Diese Woche</div>
+  <div class="tr-chip" onclick="setRange('twoweeks',this)">Nächste 2 Wochen</div>
+  <div class="tr-chip" onclick="setRange('month',this)">Nächster Monat</div>
+</div>
+
 <main id="mainContent" style="display:none">
 
   <!-- ADD CARD -->
@@ -431,14 +438,6 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
     </div>
   </div>
 
-  <!-- TIME RANGE -->
-  <div class="timerange-bar" id="timerangeBar" style="display:none">
-    <div class="tr-chip active" onclick="setRange('alle',this)">Alle</div>
-    <div class="tr-chip" onclick="setRange('week',this)">Diese Woche</div>
-    <div class="tr-chip" onclick="setRange('twoweeks',this)">Nächste 2 Wochen</div>
-    <div class="tr-chip" onclick="setRange('month',this)">Nächster Monat</div>
-  </div>
-
   <div id="taskList"></div>
 </main>
 
@@ -475,6 +474,8 @@ function initApp(){
   document.getElementById('aDate').value=todayStr();
   loadTasks();spawnRecurring();renderAll();
   const now=new Date();calYear=now.getFullYear();calMonth=now.getMonth();
+  // Show timerange bar for default 'offen' tab
+  document.getElementById('timerangeBar').style.display='flex';
   subscribeFirebase();
 }
 
@@ -538,16 +539,32 @@ function loadTasks(){const s=localStorage.getItem('pk_tasks');if(s)try{tasks=JSO
 function recurDays(t){if(t.recur==='custom')return parseInt(t.customDays)||1;return RECUR_DAYS[t.recur]||7;}
 function recurLabel(t){if(!t.recur||t.recur==='none')return'';if(t.recur==='custom')return`Alle ${t.customDays} Tage`;return{daily:'Täglich',weekly:'Wöchentlich',biweekly:'2-wöchentlich',monthly:'Monatlich'}[t.recur]||'';}
 function spawnRecurring(){
-  const today=todayStr();
-  if(localStorage.getItem('pk_lastspawn')===today)return;
-  localStorage.setItem('pk_lastspawn',today);
-  tasks.filter(t=>t.recur&&t.recur!=='none'&&t.isTemplate).forEach(tmpl=>{
+  const today=new Date();today.setHours(0,0,0,0);
+  const sixMonths=new Date(today);sixMonths.setMonth(sixMonths.getMonth()+6);
+  const templates=tasks.filter(t=>t.recur&&t.recur!=='none'&&t.isTemplate);
+  templates.forEach(tmpl=>{
     const days=recurDays(tmpl);
-    const base=new Date(tmpl.lastSpawn||tmpl.date||today);base.setHours(0,0,0,0);
-    const todayD=new Date(today);todayD.setHours(0,0,0,0);
-    if((todayD-base)/86400000>=days){
-      const nt={...tmpl,id:Date.now()+Math.random(),done:false,isTemplate:false,created:Date.now(),date:today};
-      tasks.unshift(nt);tmpl.lastSpawn=today;saveTask(nt);
+    const startDate=new Date(tmpl.date||todayStr());startDate.setHours(0,0,0,0);
+    // Find all existing spawned instances of this template
+    const existingDates=new Set(
+      tasks.filter(t=>t.templateId===tmpl.id&&!t.isTemplate).map(t=>t.date)
+    );
+    // Generate all occurrences for next 6 months
+    let cur=new Date(startDate);
+    while(cur<=sixMonths){
+      const ds=cur.toISOString().split('T')[0];
+      if(cur>=today&&!existingDates.has(ds)){
+        const nt={...tmpl,
+          id:Date.now()+Math.random(),
+          done:false,isTemplate:false,
+          templateId:tmpl.id,
+          created:Date.now(),
+          date:ds
+        };
+        tasks.push(nt);
+        saveTask(nt);
+      }
+      cur.setDate(cur.getDate()+days);
     }
   });
 }
@@ -720,14 +737,14 @@ function renderAll(){
   let f=[...tasks];
   if(currentTab==='offen')f=f.filter(t=>!t.done&&!t.isTemplate);
   else if(currentTab==='wiederkehrend')f=f.filter(t=>t.isTemplate);
-  else if(currentTab==='erledigt')f=f.filter(t=>t.done);
+  else if(currentTab==='erledigt')f=f.filter(t=>t.done&&!t.isTemplate);
   if(currentCat!=='alle'&&currentTab!=='wiederkehrend')f=f.filter(t=>t.cat===currentCat);
   if(currentPerson!=='alle')f=f.filter(t=>t.who===currentPerson);
   if(!['wiederkehrend','erledigt'].includes(currentTab))f=applyRange(f);
 
   const container=document.getElementById('taskList');
   if(!f.length){
-    const msgs={offen:'✨ Alles erledigt!',wiederkehrend:'Keine wiederkehrenden Aufgaben.',erledigt:'Noch nichts erledigt.'};
+    const msgs={offen:'✨ Alles erledigt!',wiederkehrend:'Keine Vorlagen. Erstelle eine Aufgabe mit Wiederkehrend-Option.',erledigt:'Noch nichts erledigt.'};
     container.innerHTML=`<div class="no-tasks">${msgs[currentTab]||'Keine Aufgaben.'}</div>`;return;
   }
   f.sort((a,b)=>{
