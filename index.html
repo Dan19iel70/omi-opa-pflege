@@ -85,6 +85,7 @@ main{padding:13px 13px 100px;max-width:480px;margin:0 auto;}
 .cat-besuch{background:#FCEEF7;color:#A04080;}
 .cat-behörden{background:#E8F3FA;color:#2060A0;}
 .cat-schwimmbad{background:#E0F4FF;color:#0070A0;}
+.cat-coiffeur{background:#F5E8F0;color:#904070;}
 .cat-sonstiges{background:var(--warm);color:var(--muted);}
 .urgent-badge{font-size:10px;background:var(--terracotta);color:white;padding:2px 6px;border-radius:20px;font-weight:600;}
 .task-actions{display:flex;flex-direction:column;gap:3px;flex-shrink:0;}
@@ -320,7 +321,8 @@ window.addEventListener('firebaseReady', () => {
     <div class="filter-chip" onclick="setFilter('cat','medikamente',this)">💊 Medikamente</div>
     <div class="filter-chip" onclick="setFilter('cat','besuch',this)">💛 Besuch</div>
     <div class="filter-chip" onclick="setFilter('cat','schwimmbad',this)">🏊 Schwimmbad</div>
-    <div class="filter-chip" onclick="setFilter('cat','behörden',this)">📋 Behörden</div>
+    <div class="filter-chip" onclick="setFilter('cat'  ,'behörden',this)">📋 Behörden</div>
+    <div class="filter-chip" onclick="setFilter('cat','coiffeur',this)">✂️ Coiffeur</div>
     <div class="filter-chip" onclick="setFilter('cat','sonstiges',this)">🔖 Sonstiges</div>
   </div>
   <div class="filter-row" id="personFilterRow">
@@ -369,6 +371,7 @@ window.addEventListener('firebaseReady', () => {
             <option value="besuch">💛 Besuch</option>
             <option value="schwimmbad">🏊 Schwimmbad</option>
             <option value="behörden">📋 Behörden</option>
+            <option value="coiffeur">✂️ Coiffeur</option>
           </select>
         </div>
         <div class="field">
@@ -427,8 +430,8 @@ let selectedRecur='none',calTaskId=null;
 let calYear,calMonth,calSelectedDay=null;
 let confirmCallback=null;
 
-const CAT_LABELS={arzt:'🏥 Arzt',haushalt:'🏠 Haushalt',einkauf:'🛒 Einkauf',medikamente:'💊 Medikamente',besuch:'💛 Besuch',schwimmbad:'🏊 Schwimmbad',behörden:'📋 Behörden',sonstiges:'🔖 Sonstiges'};
-const CAT_COLORS={arzt:'#E87070',haushalt:'#6EA86E',einkauf:'#E0A030',medikamente:'#8070C0',besuch:'#C070A0',schwimmbad:'#40A0C8',behörden:'#4090C0',sonstiges:'#A09080'};
+const CAT_LABELS={arzt:'🏥 Arzt',haushalt:'🏠 Haushalt',einkauf:'🛒 Einkauf',medikamente:'💊 Medikamente',besuch:'💛 Besuch',schwimmbad:'🏊 Schwimmbad',behörden:'📋 Behörden',coiffeur:'✂️ Coiffeur',sonstiges:'🔖 Sonstiges'};
+const CAT_COLORS={arzt:'#E87070',haushalt:'#6EA86E',einkauf:'#E0A030',medikamente:'#8070C0',besuch:'#C070A0',schwimmbad:'#40A0C8',behörden:'#4090C0',coiffeur:'#B06090',sonstiges:'#A09080'};
 const RECUR_FIXED={daily:1,weekly:7,biweekly:14,monthly:30};
 
 // SETUP
