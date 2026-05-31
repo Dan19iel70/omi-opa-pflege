@@ -718,11 +718,17 @@ function applyRange(f){
 function updatePersonChips(){
   const people=[...new Set(tasks.filter(t=>t.who).map(t=>t.who))].sort();
   const row=document.getElementById('personRow');
-  row.querySelectorAll('.chip:not(:first-child)').forEach(c=>c.remove());
+  // Remove only person chips, keep label and Alle chip
+  row.querySelectorAll('.pchip.person-dynamic').forEach(c=>c.remove());
+  // Update Alle chip active state
+  const alleChip=row.querySelector('.pchip');
+  if(alleChip)alleChip.classList.toggle('active', currentPerson==='alle');
+  // Add person chips
   people.forEach(p=>{
     const el=document.createElement('div');
-    el.className='chip pchip'+(currentPerson===p?' active':'');
-    el.textContent=p;el.onclick=()=>setPerson(p,el);
+    el.className='chip pchip person-dynamic'+(currentPerson===p?' active':'');
+    el.textContent=p;
+    el.onclick=()=>setPerson(p,el);
     row.appendChild(el);
   });
   // Update datalists
