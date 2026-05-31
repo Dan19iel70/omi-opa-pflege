@@ -378,7 +378,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
-      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v1.6</div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v1.8</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -624,10 +624,18 @@ function spawnRecurringForTemplate(tmpl){
   if(tmpl.endType==='date'&&tmpl.endDate){const ed=new Date(tmpl.endDate);if(ed<endLimit)endLimit=ed;}
   const newInstances=[];
   const parseDate2=d=>{const[y,m,day]=d.split('-').map(Number);return new Date(y,m-1,day);};
-  let cur=parseDate2(tmpl.date||todayStr());
+  const startDate2=parseDate2(tmpl.date||todayStr());
+  // Start from max(startDate, today), aligned to recurrence rhythm
+  let cur;
+  if(startDate2>=today){cur=new Date(startDate2);}
+  else{
+    const diff=Math.ceil((today-startDate2)/86400000);
+    const steps=Math.ceil(diff/days);
+    cur=new Date(startDate2);cur.setDate(cur.getDate()+steps*days);
+  }
   while(cur<=endLimit&&remainingCount>0){
     const ds=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
-    if(cur>=today&&!doneDates.has(ds)){
+    if(!doneDates.has(ds)){
       const nt={...tmpl,id:Date.now()+Math.random()*1000,done:false,isTemplate:false,templateId:tmpl.id,created:Date.now(),date:ds};
       newInstances.push(nt);
       remainingCount--;
@@ -649,7 +657,9 @@ function spawnRecurring(force=false){
   const templates=tasks.filter(t=>t.recur&&t.recur!=='none'&&t.isTemplate);
   templates.forEach(tmpl=>{
     const days=recurDays(tmpl);
-    const startDate=new Date(tmpl.date||todayStr());startDate.setHours(0,0,0,0);
+    const tdStr=tmpl.date||todayStr();
+    const[sy,sm,sd]=tdStr.split('-').map(Number);
+    const startDate=new Date(sy,sm-1,sd);
     const existingInstances=tasks.filter(t=>t.templateId===tmpl.id&&!t.isTemplate);
     const existingDates=new Set(existingInstances.map(t=>t.date));
     const doneCount=existingInstances.filter(t=>t.done).length;
@@ -660,11 +670,18 @@ function spawnRecurring(force=false){
       if(ed<endLimit)endLimit=ed;
     }
     let remainingCount=tmpl.endType==='count'?(tmpl.endCount||10)-doneCount:999;
-    // Generate occurrences
-    let cur=new Date(startDate);let generated=0;
+    // Start from max(startDate, today) to skip past dates
+    let cur=startDate>=today?new Date(startDate):new Date(today);
+    // Align cur to a valid recurrence date starting from startDate
+    if(startDate<today&&days>0){
+      const diff=Math.ceil((today-startDate)/86400000);
+      const steps=Math.ceil(diff/days);
+      cur=new Date(startDate);cur.setDate(cur.getDate()+steps*days);
+    }
+    let generated=0;
     while(cur<=endLimit&&remainingCount>0){
-      const ds=cur.toISOString().split('T')[0];
-      if(cur>=today&&!existingDates.has(ds)){
+      const ds=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
+      if(!existingDates.has(ds)){
         const nt={...tmpl,
           id:Date.now()+Math.random()*1000,
           done:false,isTemplate:false,
