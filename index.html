@@ -365,34 +365,9 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
       </div>
     </div>
     <div class="field"><label>Zuständig</label><input type="text" id="eWho" maxlength="20" list="eWhoList" autocomplete="off"><datalist id="eWhoList"></datalist></div>
-    <div class="field"><label>Wiederkehrend</label>
-      <div class="chip-picker" id="eRecurPicker">
-        <div class="pick-chip active" data-v="none" onclick="pickRecur('e',this)">Einmalig</div>
-        <div class="pick-chip" data-v="daily" onclick="pickRecur('e',this)">Täglich</div>
-        <div class="pick-chip" data-v="weekly" onclick="pickRecur('e',this)">Wöchentlich</div>
-        <div class="pick-chip" data-v="biweekly" onclick="pickRecur('e',this)">2-wöchentlich</div>
-        <div class="pick-chip" data-v="monthly" onclick="pickRecur('e',this)">Monatlich</div>
-        <div class="pick-chip" data-v="custom" onclick="pickRecur('e',this)">Eigener…</div>
-      </div>
-      <div class="custom-interval" id="eCustomBox"><span>Alle</span><input type="number" id="eCustomDays" min="1" max="365" value="4"><span>Tage</span></div>
-      <div class="recur-end" id="eEndBox" style="display:none;margin-top:8px;">
-        <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:4px;">Endet</label>
-        <div class="chip-picker">
-          <div class="pick-chip active" data-v="never" onclick="pickEnd('e',this)">Nie</div>
-          <div class="pick-chip" data-v="count" onclick="pickEnd('e',this)">Nach X-mal</div>
-          <div class="pick-chip" data-v="date" onclick="pickEnd('e',this)">An Datum</div>
-        </div>
-        <div id="eEndCount" style="display:none;margin-top:6px;">
-          <div style="display:flex;align-items:center;gap:8px;background:var(--warm);border-radius:10px;padding:8px 11px;">
-            <span style="font-size:13px;">Nach</span>
-            <input type="number" id="eEndCountVal" min="1" max="999" value="10" style="width:60px;padding:5px 7px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;text-align:center;background:white;">
-            <span style="font-size:13px;">Mal</span>
-          </div>
-        </div>
-        <div id="eEndDate" style="display:none;margin-top:6px;">
-          <input type="date" id="eEndDateVal" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-family:DM Sans,sans-serif;font-size:14px;background:var(--cream);">
-        </div>
-      </div>
+    <div id="eRecurInfo" style="display:none;background:var(--warm);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:8px;">
+      🔁 <span id="eRecurInfoText"></span><br>
+      <span style="font-size:11px;">Wiederkehrend-Einstellungen können nicht bearbeitet werden.<br>Lösche die Vorlage und erstelle eine neue um sie zu ändern.</span>
     </div>
     <button class="edit-save-btn" onclick="saveEdit()">💾 Speichern</button>
     <button class="edit-cancel-btn" onclick="closeOverlay('editOverlay')">Abbrechen</button>
@@ -817,17 +792,18 @@ function openEdit(id){
   document.getElementById('eCat').value=t.cat||'sonstiges';
   document.querySelectorAll('#eCatPicker .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===(t.cat||'sonstiges')));
   document.getElementById('eWho').value=t.who||'';
-  const recur=t.recur||'none';
-  document.querySelectorAll('#eRecurPicker .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===recur));
-  document.getElementById('eCustomDays').value=t.customDays||4;
-  document.getElementById('eCustomBox').classList.toggle('show',recur==='custom');
-  document.getElementById('eEndBox').style.display=recur==='none'?'none':'block';
-  const endType=t.endType||'never';
-  document.querySelectorAll('#eEndBox .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===endType));
-  document.getElementById('eEndCount').style.display=endType==='count'?'block':'none';
-  document.getElementById('eEndDate').style.display=endType==='date'?'block':'none';
-  if(t.endCount)document.getElementById('eEndCountVal').value=t.endCount;
-  if(t.endDate)document.getElementById('eEndDateVal').value=t.endDate;
+  // Show recur info as read-only
+  const infoBox=document.getElementById('eRecurInfo');
+  if(t.isTemplate&&t.recur&&t.recur!=='none'){
+    infoBox.style.display='block';
+    let info=recurLabel(t);
+    if(t.endType==='count')info+=`, endet nach ${t.endCount} Mal`;
+    else if(t.endType==='date')info+=`, endet am ${t.endDate}`;
+    else info+=', läuft unbegrenzt';
+    document.getElementById('eRecurInfoText').textContent=info;
+  } else {
+    infoBox.style.display='none';
+  }
   document.getElementById('editOverlay').classList.add('open');
 }
 function saveEdit(){
