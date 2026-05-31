@@ -235,7 +235,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 .chat-empty{text-align:center;padding:40px 20px;color:var(--muted);font-family:'Fraunces',serif;font-style:italic;}
 
 /* TAKE OVER BUTTON */
-.takeover-btn{font-size:11px;color:var(--sage-dark);background:var(--done-bg);border:1px solid var(--sage);border-radius:20px;padding:2px 8px;cursor:pointer;white-space:nowrap;margin-top:4px;display:inline-block;}
+.takeover-btn{font-size:11px;color:var(--sage-dark);background:var(--done-bg);border:1.5px solid var(--sage);border-radius:20px;padding:4px 10px;cursor:pointer;white-space:nowrap;margin-top:6px;display:inline-flex;align-items:center;gap:4px;font-weight:500;}
 .takeover-btn:hover{background:var(--sage);color:white;}
 </style>
 </head>
@@ -400,15 +400,16 @@ function updateChatBadge() {
 
 // Takeover task
 function takeoverTask(id) {
-  const t = tasks.find(t => t.id === id); if(!t) return;
+  // Use string comparison to avoid float precision issues
+  const t = tasks.find(t => String(t.id) === String(id)); 
+  if(!t) { console.warn('Task not found:', id); return; }
   const oldWho = t.who;
   if(oldWho === myName) return;
   t.who = myName;
-  saveTask(t);
-  renderAll();
-  // Log activity
-  logActivity(`${myName} hat die Aufgabe «${t.title}» von ${oldWho} übernommen`);
+  renderAll(); // Show immediately
+  saveTask(t); // Sync to Firebase
   updatePersonChips();
+  logActivity(`${myName} hat die Aufgabe «${t.title}» von ${oldWho||'?'} übernommen`);
 }
 
 // Send on Enter
@@ -418,6 +419,34 @@ document.addEventListener('keydown', e => {
 
 // Subscribe chat when app starts
 const origInitApp = window.initApp;
+
+
+// ===== REGISTERED USERS =====
+async function registerUser(){
+  if(!window._fbReady||!window._db||!myName)return;
+  const r=window._doc(window._db,'kreise',getKreisId(),'users',myName);
+  await window._setDoc(r,{name:myName,lastSeen:Date.now()});
+}
+
+function subscribeUsers(){
+  if(!window._fbReady||!window._db)return;
+  const col=window._col(window._db,'kreise',getKreisId(),'users');
+  window._onSnapshot(col,snap=>{
+    registeredUsers=snap.docs.map(d=>d.data().name).sort();
+    updateAllWhoLists();
+    updatePersonChips();
+  });
+}
+
+function updateAllWhoLists(){
+  // Always include myName + all registered users
+  const all=[...new Set([myName,...registeredUsers])].sort();
+  const opts=all.map(p=>`<option value="${p}">`).join('');
+  ['aWhoList','eWhoList','setupNameList'].forEach(id=>{
+    const dl=document.getElementById(id);
+    if(dl)dl.innerHTML=opts;
+  });
+}
 
 </script>
 
@@ -514,7 +543,7 @@ const origInitApp = window.initApp;
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
-      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v1.9</div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.1</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -654,7 +683,7 @@ const CAT_LABELS={arzt:'🏥 Arzt',haushalt:'🏠 Haushalt',einkauf:'🛒 Einkau
 const CAT_COLORS={arzt:'#E87070',haushalt:'#6EA86E',einkauf:'#E0A030',medikamente:'#8070C0',besuch:'#C070A0',schwimmbad:'#40A0C8',spitex:'#4090C0',coiffeur:'#B06090',sonstiges:'#A09080'};
 const RECUR_DAYS={daily:1,weekly:7,biweekly:14,monthly:30};
 
-let myName='',tasks=[],currentTab='offen',currentCat='alle',currentPerson='alle',currentRange='alle';
+let myName='',tasks=[],registeredUsers=[],currentTab='offen',currentCat='alle',currentPerson='alle',currentRange='alle';
 const _pendingDeletes=new Set(); // Track IDs deleted locally but not yet in Firebase
 let calYear,calMonth,calSelDay=null,calTaskId=null,editTaskId=null,confirmCb=null;
 let _unsub=null,_kreisId=null;
@@ -687,6 +716,8 @@ function initApp(){
   document.getElementById('timerangeBar').style.display='flex';
   subscribeFirebase();
   subscribeChat();
+  registerUser();
+  subscribeUsers();
 }
 
 window.addEventListener('DOMContentLoaded',()=>{
@@ -734,7 +765,13 @@ function subscribeFirebase(){
   });
   document.getElementById('fbStatus').textContent='☁️';
 }
-window.addEventListener('fbReady',()=>{ if(typeof initApp!=='undefined'&&document.getElementById('mainContent').style.display!=='none')subscribeFirebase(); });
+window.addEventListener('fbReady',()=>{
+  if(typeof initApp!=='undefined'&&document.getElementById('mainContent').style.display!=='none'){
+    subscribeFirebase();
+    registerUser();
+    subscribeUsers();
+  }
+});
 
 async function saveTask(task){
   // Always update localStorage immediately
@@ -1105,7 +1142,9 @@ function updatePersonChips(){
     row.appendChild(el);
   });
   // Update datalists
-  const opts=people.map(p=>`<option value="${p}">`).join('');
+  // Always include own name
+  const allPeople=[...new Set([myName,...people])].sort();
+  const opts=allPeople.map(p=>`<option value="${p}">`).join('');
   ['aWhoList','eWhoList'].forEach(id=>{const dl=document.getElementById(id);if(dl)dl.innerHTML=opts;});
 }
 
@@ -1174,7 +1213,7 @@ function mkCard(t){
         ${rl?`<span class="badge badge-recur">🔁 ${rl}</span>`:''}
         ${isUrgent(t)&&!t.done?`<span class="badge badge-urgent">⚡ Heute!</span>`:''}
       </div>
-      ${!t.done&&t.who!==myName?`<div class="takeover-btn" onclick="takeoverTask(${t.id})">✋ Ich übernehme das</div>`:''}
+      ${!t.done&&t.who!==myName?`<div class="takeover-btn" onclick="takeoverTask('${t.id}')">✋ Ich übernehme</div>`:''}
     </div>
     <div class="task-actions">
       <button class="task-btn" onclick="openEdit(${t.id})">✏️</button>
