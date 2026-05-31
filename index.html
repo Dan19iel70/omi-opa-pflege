@@ -97,7 +97,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 .cat-medikamente{background:#EAE8FD;color:#5040A0;}
 .cat-besuch{background:#FCEEF7;color:#A04080;}
 .cat-schwimmbad{background:#E0F4FF;color:#0070A0;}
-.cat-behörden{background:#E8F3FA;color:#2060A0;}
+.cat-spitex{background:#E8F3FA;color:#2060A0;}
 .cat-coiffeur{background:#F5E8F0;color:#904070;}
 .cat-sonstiges{background:var(--warm);color:var(--muted);}
 .task-actions{display:flex;flex-direction:column;gap:4px;flex-shrink:0;}
@@ -311,7 +311,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
         <div class="pick-chip" data-v="medikamente" onclick="pickCat('e',this)">💊 Medikamente</div>
         <div class="pick-chip" data-v="besuch" onclick="pickCat('e',this)">💛 Besuch</div>
         <div class="pick-chip" data-v="schwimmbad" onclick="pickCat('e',this)">🏊 Schwimmbad</div>
-        <div class="pick-chip" data-v="behörden" onclick="pickCat('e',this)">📋 Behörden</div>
+        <div class="pick-chip" data-v="spitex" onclick="pickCat('e',this)">👩‍⚕️ Spitex</div>
         <div class="pick-chip" data-v="coiffeur" onclick="pickCat('e',this)">✂️ Coiffeur</div>
       </div>
     </div>
@@ -380,7 +380,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
     <div class="chip" onclick="setCat('medikamente',this)">💊 Medikamente</div>
     <div class="chip" onclick="setCat('besuch',this)">💛 Besuch</div>
     <div class="chip" onclick="setCat('schwimmbad',this)">🏊 Schwimmbad</div>
-    <div class="chip" onclick="setCat('behörden',this)">📋 Behörden</div>
+    <div class="chip" onclick="setCat('spitex',this)">👩‍⚕️ Spitex</div>
     <div class="chip" onclick="setCat('coiffeur',this)">✂️ Coiffeur</div>
     <div class="chip" onclick="setCat('sonstiges',this)">🔖 Sonstiges</div>
   </div>
@@ -423,7 +423,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
           <div class="pick-chip" data-v="medikamente" onclick="pickCat('a',this)">💊 Medikamente</div>
           <div class="pick-chip" data-v="besuch" onclick="pickCat('a',this)">💛 Besuch</div>
           <div class="pick-chip" data-v="schwimmbad" onclick="pickCat('a',this)">🏊 Schwimmbad</div>
-          <div class="pick-chip" data-v="behörden" onclick="pickCat('a',this)">📋 Behörden</div>
+          <div class="pick-chip" data-v="spitex" onclick="pickCat('a',this)">👩‍⚕️ Spitex</div>
           <div class="pick-chip" data-v="coiffeur" onclick="pickCat('a',this)">✂️ Coiffeur</div>
         </div>
       </div>
@@ -476,8 +476,8 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 </main>
 
 <script>
-const CAT_LABELS={arzt:'🏥 Arzt',haushalt:'🏠 Haushalt',einkauf:'🛒 Einkauf',medikamente:'💊 Medikamente',besuch:'💛 Besuch',schwimmbad:'🏊 Schwimmbad',behörden:'📋 Behörden',coiffeur:'✂️ Coiffeur',sonstiges:'🔖 Sonstiges'};
-const CAT_COLORS={arzt:'#E87070',haushalt:'#6EA86E',einkauf:'#E0A030',medikamente:'#8070C0',besuch:'#C070A0',schwimmbad:'#40A0C8',behörden:'#4090C0',coiffeur:'#B06090',sonstiges:'#A09080'};
+const CAT_LABELS={arzt:'🏥 Arzt',haushalt:'🏠 Haushalt',einkauf:'🛒 Einkauf',medikamente:'💊 Medikamente',besuch:'💛 Besuch',schwimmbad:'🏊 Schwimmbad',spitex:'👩‍⚕️ Spitex',coiffeur:'✂️ Coiffeur',sonstiges:'🔖 Sonstiges'};
+const CAT_COLORS={arzt:'#E87070',haushalt:'#6EA86E',einkauf:'#E0A030',medikamente:'#8070C0',besuch:'#C070A0',schwimmbad:'#40A0C8',spitex:'#4090C0',coiffeur:'#B06090',sonstiges:'#A09080'};
 const RECUR_DAYS={daily:1,weekly:7,biweekly:14,monthly:30};
 
 let myName='',tasks=[],currentTab='offen',currentCat='alle',currentPerson='alle',currentRange='alle';
@@ -741,14 +741,31 @@ function saveEdit(){
   if(!title)return;
   const t=tasks.find(t=>t.id===editTaskId);if(!t)return;
   const recur=getPickerVal('eRecurPicker');
+  const wasTemplate=t.isTemplate;
+  const oldId=String(t.id);
+
+  // Update template fields
   t.title=title;t.note=document.getElementById('eNote').value.trim();
   t.date=document.getElementById('eDate').value;t.time=document.getElementById('eTime').value;
   t.cat=document.getElementById('eCat').value;t.who=document.getElementById('eWho').value.trim()||myName;
   t.recur=recur;t.customDays=recur==='custom'?parseInt(document.getElementById('eCustomDays').value)||4:null;
   t.isTemplate=recur!=='none';
   if(t.isTemplate){const ev=getEndVal('e');t.endType=ev.endType;t.endCount=ev.endCount;t.endDate=ev.endDate;}
-  renderAll();closeOverlay('editOverlay');
-  saveTask(t); // background sync
+
+  // If template: delete all future undone instances and regenerate
+  if(t.isTemplate||wasTemplate){
+    const oldInstances=tasks.filter(x=>String(x.templateId)===oldId&&!x.done);
+    // Delete old instances locally and from Firebase
+    tasks=tasks.filter(x=>!(String(x.templateId)===oldId&&!x.done));
+    oldInstances.forEach(x=>removeTask(x.id));
+    // Regenerate with new settings
+    saveTask(t);
+    setTimeout(()=>{spawnRecurring();renderAll();},300);
+  } else {
+    saveTask(t);
+    renderAll();
+  }
+  closeOverlay('editOverlay');
 }
 
 // CONFIRM
