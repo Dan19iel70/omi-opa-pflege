@@ -403,6 +403,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v1.4</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -530,6 +531,7 @@ const CAT_COLORS={arzt:'#E87070',haushalt:'#6EA86E',einkauf:'#E0A030',medikament
 const RECUR_DAYS={daily:1,weekly:7,biweekly:14,monthly:30};
 
 let myName='',tasks=[],currentTab='offen',currentCat='alle',currentPerson='alle',currentRange='alle';
+const _pendingDeletes=new Set(); // Track IDs deleted locally but not yet in Firebase
 let calYear,calMonth,calSelDay=null,calTaskId=null,editTaskId=null,confirmCb=null;
 let _unsub=null,_kreisId=null;
 
@@ -598,9 +600,9 @@ function subscribeFirebase(){
     if(snap.empty){tasks.forEach(async t=>{const r=window._doc(window._db,'kreise',kreisId,'tasks',String(t.id));await window._setDoc(r,t);});return;}
     // Merge: keep local pending deletes/updates
     const incoming=snap.docs.map(d=>d.data());
-    // Only update if not currently doing a bulk operation
     if(!window._bulkOp){
-      tasks=incoming;
+      // Filter out tasks that are pending deletion locally
+      tasks=incoming.filter(t=>!_pendingDeletes.has(String(t.id)));
       localStorage.setItem('pk_tasks',JSON.stringify(tasks));
       renderAll();
     }
@@ -618,10 +620,15 @@ async function saveTask(task){
   window._setDoc(r,task).catch(e=>console.warn('Firebase save error:',e));
 }
 async function removeTask(id){
+  _pendingDeletes.add(String(id)); // Mark as pending delete
   localStorage.setItem('pk_tasks',JSON.stringify(tasks));
   if(!window._fbReady||!window._db)return;
   const r=window._doc(window._db,'kreise',getKreisId(),'tasks',String(id));
-  await window._deleteDoc(r);
+  try{
+    await window._deleteDoc(r);
+  }finally{
+    _pendingDeletes.delete(String(id)); // Remove from pending after confirmed
+  }
 }
 function loadTasks(){const s=localStorage.getItem('pk_tasks');if(s)try{tasks=JSON.parse(s);}catch(e){tasks=[];}}
 
@@ -656,7 +663,7 @@ function spawnRecurringForTemplate(tmpl){
   saveTask(tmpl);
   newInstances.forEach(x=>saveTask(x));
   // Re-enable Firebase snapshot after 3 seconds
-  setTimeout(()=>{window._bulkOp=false;},3000);
+  setTimeout(()=>{window._bulkOp=false;},8000);
 }
 
 function spawnRecurring(force=false){
