@@ -547,9 +547,14 @@ function subscribeFirebase(){
   const col=window._col(window._db,'kreise',kreisId,'tasks');
   _unsub=window._onSnapshot(col,snap=>{
     if(snap.empty){tasks.forEach(async t=>{const r=window._doc(window._db,'kreise',kreisId,'tasks',String(t.id));await window._setDoc(r,t);});return;}
-    tasks=snap.docs.map(d=>d.data());
-    localStorage.setItem('pk_tasks',JSON.stringify(tasks));
-    renderAll();
+    // Merge: keep local pending deletes/updates
+    const incoming=snap.docs.map(d=>d.data());
+    // Only update if not currently doing a bulk operation
+    if(!window._bulkOp){
+      tasks=incoming;
+      localStorage.setItem('pk_tasks',JSON.stringify(tasks));
+      renderAll();
+    }
   });
   document.getElementById('fbStatus').textContent='☁️';
 }
@@ -575,14 +580,14 @@ function loadTasks(){const s=localStorage.getItem('pk_tasks');if(s)try{tasks=JSO
 function recurDays(t){if(t.recur==='custom')return parseInt(t.customDays)||1;return RECUR_DAYS[t.recur]||7;}
 function recurLabel(t){if(!t.recur||t.recur==='none')return'';if(t.recur==='custom')return`Alle ${t.customDays} Tage`;return{daily:'Täglich',weekly:'Wöchentlich',biweekly:'2-wöchentlich',monthly:'Monatlich'}[t.recur]||'';}
 function spawnRecurringForTemplate(tmpl){
-  // Regenerate instances for one specific template
+  window._bulkOp=true; // Prevent Firebase snapshot from overwriting
   const today=new Date();today.setHours(0,0,0,0);
   const threeMonths=new Date(today);threeMonths.setMonth(threeMonths.getMonth()+3);
   const days=recurDays(tmpl);
   const idStr=String(tmpl.id);
   const doneDates=new Set(tasks.filter(x=>String(x.templateId)===idStr&&x.done).map(x=>x.date));
   const doneCount=doneDates.size;
-  let remainingCount=tmpl.endType==='count'?(tmpl.endCount||10)-doneCount:999;
+  let remainingCount=tmpl.endType==='count'?(parseInt(tmpl.endCount)||10)-doneCount:999;
   let endLimit=threeMonths;
   if(tmpl.endType==='date'&&tmpl.endDate){const ed=new Date(tmpl.endDate);if(ed<endLimit)endLimit=ed;}
   const newInstances=[];
@@ -596,11 +601,13 @@ function spawnRecurringForTemplate(tmpl){
     }
     cur.setDate(cur.getDate()+days);
   }
-  // Add to tasks and save all at once
   tasks.push(...newInstances);
-  // Save template first, then instances
+  localStorage.setItem('pk_tasks',JSON.stringify(tasks));
+  // Save to Firebase
   saveTask(tmpl);
   newInstances.forEach(x=>saveTask(x));
+  // Re-enable Firebase snapshot after 3 seconds
+  setTimeout(()=>{window._bulkOp=false;},3000);
 }
 
 function spawnRecurring(force=false){
