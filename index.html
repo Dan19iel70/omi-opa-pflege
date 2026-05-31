@@ -378,7 +378,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
-      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v1.5</div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v1.6</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -880,17 +880,23 @@ function setPerson(v,el){currentPerson=v;document.querySelectorAll('#personRow .
 function setRange(v,el){currentRange=v;document.querySelectorAll('.tr-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderAll();}
 
 // HELPERS
-function todayStr(){return new Date().toISOString().split('T')[0];}
+function todayStr(){
+  const n=new Date();
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function isUrgent(t){
   if(!t.date||t.done)return false;
-  const d=new Date(t.date);d.setHours(0,0,0,0);
+  const[y,m,day]=t.date.split('-').map(Number);
+  const d=new Date(y,m-1,day);
   const today=new Date();today.setHours(0,0,0,0);
   return(d-today)/86400000<=1;
 }
 function fmtDate(date,time){
   if(!date)return'';
-  const d=new Date(date);
+  // Parse as local date to avoid UTC timezone offset (e.g. UTC+2 shifts date back 1 day)
+  const[y,m,day]=date.split('-').map(Number);
+  const d=new Date(y,m-1,day); // local date constructor - no UTC issue
   let s=d.toLocaleDateString('de-CH',{weekday:'short',day:'numeric',month:'short'});
   if(time)s+=', '+time+' Uhr';return s;
 }
