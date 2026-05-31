@@ -324,9 +324,15 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
     <h3>✏️ Bearbeiten</h3>
     <div class="field"><label>Aufgabe *</label><input type="text" id="eTitle" maxlength="60"></div>
     <div class="field"><label>Notiz</label><textarea id="eNote"></textarea></div>
-    <div class="field-row">
-      <div class="field"><label>Datum</label><input type="date" id="eDate"></div>
-      <div class="field"><label>Uhrzeit</label><input type="time" id="eTime"></div>
+    <div class="field"><label>Datum</label><input type="date" id="eDate"></div>
+    <div class="field"><label>Uhrzeit (optional)</label>
+      <div class="chip-picker" id="eDayChips" style="margin-bottom:6px;">
+        <div class="pick-chip" data-v="morgens" onclick="pickDaypart('e','morgens',this)">🌅 Morgen</div>
+        <div class="pick-chip" data-v="mittags" onclick="pickDaypart('e','mittags',this)">☀️ Mittag</div>
+        <div class="pick-chip" data-v="abends" onclick="pickDaypart('e','abends',this)">🌙 Abend</div>
+      </div>
+      <input type="hidden" id="eDaypart">
+      <input type="time" id="eTime" step="300" oninput="onTimeInput('e')">
     </div>
     <div class="field"><label>Kategorie</label>
       <input type="hidden" id="eCat" value="sonstiges">
@@ -359,7 +365,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
-      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.4</div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.5</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -416,9 +422,15 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
     <div class="add-form" id="addForm" style="display:none">
       <div class="field"><label>Aufgabe *</label><input type="text" id="aTitle" placeholder="z.B. Arzttermin vereinbaren" maxlength="60"></div>
       <div class="field"><label>Notiz (optional)</label><textarea id="aNote" placeholder="Details, Adresse, Telefon…"></textarea></div>
-      <div class="field-row">
-        <div class="field"><label>Datum</label><input type="date" id="aDate"></div>
-        <div class="field"><label>Uhrzeit (optional)</label><input type="time" id="aTime"></div>
+      <div class="field"><label>Datum</label><input type="date" id="aDate"></div>
+      <div class="field"><label>Uhrzeit (optional)</label>
+        <div class="chip-picker" id="aDayChips" style="margin-bottom:6px;">
+          <div class="pick-chip" data-v="morgens" onclick="pickDaypart('a','morgens',this)">🌅 Morgen</div>
+          <div class="pick-chip" data-v="mittags" onclick="pickDaypart('a','mittags',this)">☀️ Mittag</div>
+          <div class="pick-chip" data-v="abends" onclick="pickDaypart('a','abends',this)">🌙 Abend</div>
+        </div>
+        <input type="hidden" id="aDaypart">
+        <input type="time" id="aTime" step="300" oninput="onTimeInput('a')">
       </div>
       <div class="field"><label>Kategorie</label>
         <input type="hidden" id="aCat" value="sonstiges">
@@ -504,6 +516,7 @@ const RECUR_DAYS={daily:1,weekly:7,biweekly:14,monthly:30};
 
 let myName='',tasks=[],registeredUsers=[],currentTab='offen',currentCat='alle',currentPerson='alle',currentRange='alle';
 const _pendingDeletes=new Set(); // Track IDs deleted locally but not yet in Firebase
+const _pendingAdds=new Map(); // id->task fuer lokal hinzugefuegte/geaenderte Tasks, bis Firebase-Snapshot zurueckkommt
 let calYear,calMonth,calSelDay=null,calTaskId=null,editTaskId=null,confirmCb=null;
 let _unsub=null,_kreisId=null;
 let chatMessages=[],lastReadChat=parseInt(localStorage.getItem('pk_lastReadChat')||'0'),chatUnsub=null;
@@ -638,6 +651,30 @@ function syncWhoChips(prefix){
   renderWhoChips(prefix);
 }
 
+// ===== TAGESZEIT (daypart) =====
+function pickDaypart(prefix,dp,el){
+  const wasActive=el.classList.contains('active');
+  document.querySelectorAll('#'+prefix+'DayChips .pick-chip').forEach(b=>b.classList.remove('active'));
+  if(wasActive){
+    document.getElementById(prefix+'Daypart').value='';
+  }else{
+    el.classList.add('active');
+    document.getElementById(prefix+'Daypart').value=dp;
+    document.getElementById(prefix+'Time').value=''; // exklusiv: Tageszeit oder konkrete Zeit
+  }
+}
+function onTimeInput(prefix){
+  const v=document.getElementById(prefix+'Time').value;
+  if(v){
+    document.getElementById(prefix+'Daypart').value='';
+    document.querySelectorAll('#'+prefix+'DayChips .pick-chip').forEach(b=>b.classList.remove('active'));
+  }
+}
+function setDaypartUI(prefix,dp){
+  document.getElementById(prefix+'Daypart').value=dp||'';
+  document.querySelectorAll('#'+prefix+'DayChips .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===dp));
+}
+
 // ===== PULL TO REFRESH =====
 (function(){
   let startY=0,pulling=false;const threshold=80;
@@ -733,11 +770,23 @@ function subscribeFirebase(){
   const col=window._col(window._db,'kreise',kreisId,'tasks');
   _unsub=window._onSnapshot(col,snap=>{
     if(snap.empty){tasks.forEach(async t=>{const r=window._doc(window._db,'kreise',kreisId,'tasks',String(t.id));await window._setDoc(r,t);});return;}
-    // Merge: keep local pending deletes/updates
     const incoming=snap.docs.map(d=>d.data());
     if(!window._bulkOp){
-      // Filter out tasks that are pending deletion locally
-      tasks=incoming.filter(t=>!_pendingDeletes.has(String(t.id)));
+      const incomingMap=new Map(incoming.map(t=>[String(t.id),t]));
+      // Updates/Deletes: pending laesst sich droppen, sobald Firebase deckungsgleich ist
+      for(const [id,pTask] of [..._pendingAdds.entries()]){
+        const inc=incomingMap.get(id);
+        if(inc && JSON.stringify(inc)===JSON.stringify(pTask)) _pendingAdds.delete(id);
+      }
+      // Merge: incoming als Basis, aber pending-Version gewinnt (fuer Updates die noch nicht durch sind)
+      const merged=incoming
+        .filter(t=>!_pendingDeletes.has(String(t.id)))
+        .map(t=>_pendingAdds.has(String(t.id))?_pendingAdds.get(String(t.id)):t);
+      // Adds: pending-IDs die noch nicht in incoming sind, vorn dranhaengen
+      for(const [id,pTask] of _pendingAdds.entries()){
+        if(!incomingMap.has(id)) merged.unshift(pTask);
+      }
+      tasks=merged;
       localStorage.setItem('pk_tasks',JSON.stringify(tasks));
       renderAll();
     }
@@ -750,13 +799,19 @@ window.addEventListener('fbReady',()=>{
   }
 });
 
-async function saveTask(task){
-  // Always update localStorage immediately
+function saveTask(task){
+  // Optimistic UI: pending merken, damit ein noch-nicht-synchronisierter Snapshot die Aenderung nicht zurueckwirft
+  const idStr=String(task.id);
+  _pendingAdds.set(idStr,JSON.parse(JSON.stringify(task)));
+  // Failsafe: nach 8s aufgeben (Firebase schon laengst durch)
+  setTimeout(()=>_pendingAdds.delete(idStr),8000);
   localStorage.setItem('pk_tasks',JSON.stringify(tasks));
   if(!window._fbReady||!window._db)return;
-  // Fire and forget - don't await
-  const r=window._doc(window._db,'kreise',getKreisId(),'tasks',String(task.id));
-  window._setDoc(r,task).catch(e=>console.warn('Firebase save error:',e));
+  const r=window._doc(window._db,'kreise',getKreisId(),'tasks',idStr);
+  window._setDoc(r,task).catch(e=>{
+    console.warn('Firebase save error:',e);
+    _pendingAdds.delete(idStr);
+  });
 }
 async function removeTask(id){
   _pendingDeletes.add(String(id)); // Mark as pending delete
@@ -922,6 +977,7 @@ function addTask(){
     note:document.getElementById('aNote').value.trim(),
     date:document.getElementById('aDate').value,
     time:document.getElementById('aTime').value,
+    daypart:document.getElementById('aDaypart').value,
     cat:document.getElementById('aCat').value,
     who:document.getElementById('aWho').value.trim()||myName,
     done:false,recur,
@@ -930,10 +986,9 @@ function addTask(){
     ...( isRecur ? getEndVal('a') : {} ),
     createdBy:myName,created:Date.now()
   };
-  // Show immediately (optimistic UI)
+  // Show immediately (optimistic UI). saveTask registriert pending, damit Snapshot-Race nicht zurueckwirft.
   tasks.unshift(task);
   renderAll();
-  // Save to Firebase in background
   saveTask(task);
   // Reset form
   document.getElementById('aTitle').value='';
@@ -948,6 +1003,7 @@ function addTask(){
   document.querySelectorAll('#aEndBox .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v==='never'));
   document.getElementById('aEndCount').style.display='none';
   document.getElementById('aEndDate').style.display='none';
+  setDaypartUI('a','');
   renderAll();document.getElementById('aTitle').focus();
 }
 
@@ -979,6 +1035,7 @@ function openEdit(id){
   document.getElementById('eNote').value=t.note||'';
   document.getElementById('eDate').value=t.date||'';
   document.getElementById('eTime').value=t.time||'';
+  setDaypartUI('e',t.daypart||'');
   document.getElementById('eCat').value=t.cat||'sonstiges';
   document.querySelectorAll('#eCatPicker .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===(t.cat||'sonstiges')));
   document.getElementById('eWho').value=t.who||'';
@@ -1009,6 +1066,7 @@ function saveEdit(){
   // Update template fields
   t.title=title;t.note=document.getElementById('eNote').value.trim();
   t.date=document.getElementById('eDate').value;t.time=document.getElementById('eTime').value;
+  t.daypart=document.getElementById('eDaypart').value;
   t.cat=document.getElementById('eCat').value;t.who=document.getElementById('eWho').value.trim()||myName;
   t.recur=recur;t.customDays=recur==='custom'?parseInt(document.getElementById('eCustomDays').value)||4:null;
   t.isTemplate=recur!=='none';
@@ -1081,13 +1139,21 @@ function isUrgent(t){
   const today=new Date();today.setHours(0,0,0,0);
   return(d-today)/86400000<=1;
 }
-function fmtDate(date,time){
+function timeSortKey(t){
+  if(t.time){const[h,m]=t.time.split(':').map(Number);return h*60+m;}
+  if(t.daypart==='morgens')return 8*60;
+  if(t.daypart==='mittags')return 12*60;
+  if(t.daypart==='abends')return 18*60;
+  return 24*60;
+}
+function fmtDate(date,time,daypart){
   if(!date)return'';
-  // Parse as local date to avoid UTC timezone offset (e.g. UTC+2 shifts date back 1 day)
   const[y,m,day]=date.split('-').map(Number);
-  const d=new Date(y,m-1,day); // local date constructor - no UTC issue
+  const d=new Date(y,m-1,day);
   let s=d.toLocaleDateString('de-CH',{weekday:'short',day:'numeric',month:'short'});
-  if(time)s+=', '+time+' Uhr';return s;
+  if(time)s+=', '+time+' Uhr';
+  else if(daypart)s+=' · '+daypart;
+  return s;
 }
 function applyRange(f){
   if(currentRange==='alle')return f;
@@ -1141,7 +1207,9 @@ function renderAll(){
     if(a.done!==b.done)return a.done?1:-1;
     if(!a.date&&!b.date)return b.created-a.created;
     if(!a.date)return 1;if(!b.date)return-1;
-    return new Date(a.date)-new Date(b.date);
+    const dd=new Date(a.date)-new Date(b.date);
+    if(dd!==0)return dd;
+    return timeSortKey(a)-timeSortKey(b);
   });
   container.innerHTML='';
   if(['wiederkehrend','erledigt'].includes(currentTab)){
@@ -1171,7 +1239,7 @@ function mkCard(t){
   const card=document.createElement('div');
   card.className=['task-card',t.done?'done':'',isUrgent(t)?'urgent':''].filter(Boolean).join(' ');
   if(!t.done){const c=CAT_COLORS[t.cat]||'#A09080';card.style.borderLeft=`4px solid ${c}`;}
-  const ds=fmtDate(t.date,t.time);
+  const ds=fmtDate(t.date,t.time,t.daypart);
   const rl=recurLabel(t);
   const idAttr=String(t.id);
   card.innerHTML=`
@@ -1234,7 +1302,7 @@ function showCalDay(ds,dt){
     <div class="cal-ev-item">
       <div class="cal-ev-dot" style="background:${CAT_COLORS[t.cat]||'#A09080'}"></div>
       <div class="cal-ev-info"><div class="cal-ev-title">${esc(t.title)}</div>
-      <div class="cal-ev-meta">${t.time?t.time+' Uhr · ':''}👤 ${esc(t.who||'–')} · ${CAT_LABELS[t.cat]||'Sonstiges'}</div></div>
+      <div class="cal-ev-meta">${t.time?t.time+' Uhr · ':t.daypart?t.daypart+' · ':''}👤 ${esc(t.who||'–')} · ${CAT_LABELS[t.cat]||'Sonstiges'}</div></div>
       <button class="cal-ev-btn" onclick="openCalExport('${String(t.id)}')">📅</button>
     </div>`).join('');
 }
@@ -1244,7 +1312,7 @@ function openCalExport(id){
   calTaskId=id;
   const t=tasks.find(t=>String(t.id)===String(id));if(!t)return;
   document.getElementById('calTitle').textContent=t.title;
-  document.getElementById('calDate').textContent=fmtDate(t.date,t.time)||'Kein Datum';
+  document.getElementById('calDate').textContent=fmtDate(t.date,t.time,t.daypart)||'Kein Datum';
   document.getElementById('calOverlay').classList.add('open');
 }
 function buildICS(t){
