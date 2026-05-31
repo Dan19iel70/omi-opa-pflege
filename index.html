@@ -352,10 +352,34 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
       <div class="chip-picker" id="eWhoChips" style="margin-bottom:6px;"></div>
       <input type="text" id="eWho" maxlength="20" autocomplete="off" placeholder="oder anderen Namen tippen" oninput="syncWhoChips('e')">
     </div>
-    <div id="eRecurInfo" style="display:none;background:var(--warm);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:8px;">
-      🔁 <span id="eRecurInfoText"></span><br>
-      <span style="font-size:11px;">Wiederkehrend-Einstellungen können nicht bearbeitet werden.<br>Lösche die Vorlage und erstelle eine neue um sie zu ändern.</span>
+    <div class="field"><label>Wiederkehrend</label>
+      <div class="chip-picker" id="eRecurPicker">
+        <div class="pick-chip active" data-v="none" onclick="pickRecur('e',this)">Einmalig</div>
+        <div class="pick-chip" data-v="daily" onclick="pickRecur('e',this)">Täglich</div>
+        <div class="pick-chip" data-v="weekly" onclick="pickRecur('e',this)">Wöchentlich</div>
+        <div class="pick-chip" data-v="biweekly" onclick="pickRecur('e',this)">2-wöchentlich</div>
+        <div class="pick-chip" data-v="monthly" onclick="pickRecur('e',this)">Monatlich</div>
+        <div class="pick-chip" data-v="custom" onclick="pickRecur('e',this)">Eigener…</div>
+      </div>
+      <div class="custom-interval" id="eCustomBox"><span>Alle</span><input type="number" id="eCustomDays" min="1" max="365" value="4"><span>Tage</span></div>
+      <div class="recur-end" id="eEndBox" style="display:none;margin-top:8px;">
+        <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:4px;">Endet</label>
+        <div class="chip-picker">
+          <div class="pick-chip active" data-v="never" onclick="pickEnd('e',this)">Nie</div>
+          <div class="pick-chip" data-v="count" onclick="pickEnd('e',this)">Nach X-mal</div>
+          <div class="pick-chip" data-v="date" onclick="pickEnd('e',this)">An Datum</div>
+        </div>
+        <div id="eEndCount" style="display:none;margin-top:6px;align-items:center;gap:8px;background:var(--warm);border-radius:10px;padding:8px 11px;">
+          <span style="font-size:13px;">Nach</span>
+          <input type="number" id="eEndCountVal" min="1" max="999" value="10" style="width:60px;padding:5px 7px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;text-align:center;background:white;">
+          <span style="font-size:13px;">Mal</span>
+        </div>
+        <div id="eEndDate" style="display:none;margin-top:6px;">
+          <input type="date" id="eEndDateVal" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-family:DM Sans,sans-serif;font-size:14px;background:var(--cream);">
+        </div>
+      </div>
     </div>
+    <div id="eRecurWarn" style="display:none;background:#FDE8E8;color:#C04040;border-radius:10px;padding:9px 11px;font-size:12px;margin-bottom:8px;line-height:1.4;"></div>
     <button class="edit-save-btn" onclick="saveEdit()">💾 Speichern</button>
     <button class="edit-cancel-btn" onclick="closeOverlay('editOverlay')">Abbrechen</button>
   </div>
@@ -365,7 +389,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
-      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.5</div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.6</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -988,8 +1012,10 @@ function addTask(){
   };
   // Show immediately (optimistic UI). saveTask registriert pending, damit Snapshot-Race nicht zurueckwirft.
   tasks.unshift(task);
-  renderAll();
   saveTask(task);
+  // Bei wiederkehrenden Aufgaben Instanzen sofort spawnen (sonst kommen sie erst beim naechsten initApp)
+  if(isRecur) spawnRecurringForTemplate(task);
+  renderAll();
   // Reset form
   document.getElementById('aTitle').value='';
   document.getElementById('aNote').value='';
@@ -1040,17 +1066,29 @@ function openEdit(id){
   document.querySelectorAll('#eCatPicker .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===(t.cat||'sonstiges')));
   document.getElementById('eWho').value=t.who||'';
   renderWhoChips('e');
-  // Show recur info as read-only
-  const infoBox=document.getElementById('eRecurInfo');
-  if(t.isTemplate&&t.recur&&t.recur!=='none'){
-    infoBox.style.display='block';
-    let info=recurLabel(t);
-    if(t.endType==='count')info+=`, endet nach ${t.endCount} Mal`;
-    else if(t.endType==='date')info+=`, endet am ${t.endDate}`;
-    else info+=', läuft unbegrenzt';
-    document.getElementById('eRecurInfoText').textContent=info;
+  // Recur/Custom/End-Picker fuer Templates UND Einzeltasks befuellen
+  // (Instanzen einer Reihe sind nicht-Templates und werden hier wie Einzeltasks behandelt)
+  const tplRecur=t.isTemplate?(t.recur||'none'):'none';
+  document.querySelectorAll('#eRecurPicker .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===tplRecur));
+  document.getElementById('eCustomBox').classList.toggle('show',tplRecur==='custom');
+  document.getElementById('eCustomDays').value=t.customDays||4;
+  const eEndBox=document.getElementById('eEndBox');
+  eEndBox.style.display=tplRecur!=='none'?'block':'none';
+  const endType=t.isTemplate?(t.endType||'never'):'never';
+  document.querySelectorAll('#eEndBox .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===endType));
+  const eEndCount=document.getElementById('eEndCount');
+  const eEndDate=document.getElementById('eEndDate');
+  eEndCount.style.display=endType==='count'?'flex':'none';
+  eEndDate.style.display=endType==='date'?'block':'none';
+  document.getElementById('eEndCountVal').value=t.endCount||10;
+  document.getElementById('eEndDateVal').value=t.endDate||'';
+  // Warnung bei Edit einer Instanz: Hinweis dass nur diese eine geaendert wird
+  const warn=document.getElementById('eRecurWarn');
+  if(t.templateId && !t.isTemplate){
+    warn.style.display='block';
+    warn.innerHTML='ℹ️ Du bearbeitest eine einzelne Wiederholung dieser Reihe — die Vorlage bleibt unveraendert. Felder Datum/Uhrzeit/Wiederkehrend wirken nur auf diesen Eintrag.';
   } else {
-    infoBox.style.display='none';
+    warn.style.display='none';
   }
   document.getElementById('eWho').dataset.originalWho = t.who||'';
   document.getElementById('editOverlay').classList.add('open');
@@ -1059,34 +1097,57 @@ function saveEdit(){
   const title=document.getElementById('eTitle').value.trim();
   if(!title)return;
   const t=tasks.find(t=>String(t.id)===String(editTaskId));if(!t)return;
-  const recur=getPickerVal('eRecurPicker');
-  const wasTemplate=t.isTemplate;
-  const oldId=String(t.id);
 
-  // Update template fields
-  t.title=title;t.note=document.getElementById('eNote').value.trim();
-  t.date=document.getElementById('eDate').value;t.time=document.getElementById('eTime').value;
+  // Basis-Felder (gelten fuer ALLE Aufgaben)
+  t.title=title;
+  t.note=document.getElementById('eNote').value.trim();
+  t.date=document.getElementById('eDate').value;
+  t.time=document.getElementById('eTime').value;
   t.daypart=document.getElementById('eDaypart').value;
-  t.cat=document.getElementById('eCat').value;t.who=document.getElementById('eWho').value.trim()||myName;
-  t.recur=recur;t.customDays=recur==='custom'?parseInt(document.getElementById('eCustomDays').value)||4:null;
-  t.isTemplate=recur!=='none';
-  if(t.isTemplate){const ev=getEndVal('e');t.endType=ev.endType;t.endCount=ev.endCount;t.endDate=ev.endDate;}
+  t.cat=document.getElementById('eCat').value;
+  t.who=document.getElementById('eWho').value.trim()||myName;
 
-  // If template: delete all future undone instances and regenerate
-  if(t.isTemplate||wasTemplate){
-    const oldInstances=tasks.filter(x=>String(x.templateId)===oldId&&!x.done);
-    // Delete old instances locally and from Firebase
-    tasks=tasks.filter(x=>!(String(x.templateId)===oldId&&!x.done));
-    oldInstances.forEach(x=>removeTask(x.id));
-    // Regenerate with new settings
-    saveTask(t);
-    // Force regenerate bypassing date check
-      spawnRecurringForTemplate(t);
-      renderAll();
-  } else {
+  const isInstance = t.templateId && !t.isTemplate;
+  if(isInstance){
+    // Instanz einer Reihe: nur diesen Eintrag speichern, Recur-Felder ignorieren
     saveTask(t);
     renderAll();
+    closeOverlay('editOverlay');
+    return;
   }
+
+  // Einzeltask oder Template: Recur-Settings auswerten
+  const wasTemplate = !!t.isTemplate;
+  const newRecur = getPickerVal('eRecurPicker'); // 'none' wenn nichts aktiv
+  const newIsTemplate = newRecur !== 'none';
+  const oldIdStr = String(t.id);
+
+  t.recur = newIsTemplate ? newRecur : 'none';
+  t.customDays = newRecur === 'custom' ? (parseInt(document.getElementById('eCustomDays').value)||4) : null;
+  t.isTemplate = newIsTemplate;
+
+  if(newIsTemplate){
+    const ev = getEndVal('e');
+    t.endType = ev.endType;
+    t.endCount = ev.endCount || null;
+    t.endDate = ev.endDate || null;
+    t.lastSpawn = t.date || todayStr();
+  } else {
+    // Wurde von Template zu Einzeltask konvertiert (oder war schon Einzeltask): Recur-Felder bereinigen
+    t.endType = null; t.endCount = null; t.endDate = null; t.lastSpawn = null;
+  }
+
+  // Wenn vorher oder jetzt Template: alle zukuenftigen unfertigen Instanzen wegraeumen
+  if(wasTemplate || newIsTemplate){
+    const futureInstances = tasks.filter(x => String(x.templateId) === oldIdStr && !x.done);
+    tasks = tasks.filter(x => !(String(x.templateId) === oldIdStr && !x.done));
+    futureInstances.forEach(x => removeTask(x.id));
+    saveTask(t);
+    if(newIsTemplate) spawnRecurringForTemplate(t); // neue Instanzen mit aktualisierten Settings
+  } else {
+    saveTask(t);
+  }
+  renderAll();
   closeOverlay('editOverlay');
 }
 
