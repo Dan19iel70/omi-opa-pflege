@@ -378,7 +378,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
-      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v1.4</div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v1.5</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -611,8 +611,9 @@ function loadTasks(){const s=localStorage.getItem('pk_tasks');if(s)try{tasks=JSO
 function recurDays(t){if(t.recur==='custom')return parseInt(t.customDays)||1;return RECUR_DAYS[t.recur]||7;}
 function recurLabel(t){if(!t.recur||t.recur==='none')return'';if(t.recur==='custom')return`Alle ${t.customDays} Tage`;return{daily:'Täglich',weekly:'Wöchentlich',biweekly:'2-wöchentlich',monthly:'Monatlich'}[t.recur]||'';}
 function spawnRecurringForTemplate(tmpl){
-  window._bulkOp=true; // Prevent Firebase snapshot from overwriting
-  const today=new Date();today.setHours(0,0,0,0);
+  window._bulkOp=true;
+  const now2=new Date();
+  const today=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate());
   const threeMonths=new Date(today);threeMonths.setMonth(threeMonths.getMonth()+3);
   const days=recurDays(tmpl);
   const idStr=String(tmpl.id);
@@ -622,9 +623,10 @@ function spawnRecurringForTemplate(tmpl){
   let endLimit=threeMonths;
   if(tmpl.endType==='date'&&tmpl.endDate){const ed=new Date(tmpl.endDate);if(ed<endLimit)endLimit=ed;}
   const newInstances=[];
-  let cur=new Date(tmpl.date||todayStr());cur.setHours(0,0,0,0);
+  const parseDate2=d=>{const[y,m,day]=d.split('-').map(Number);return new Date(y,m-1,day);};
+  let cur=parseDate2(tmpl.date||todayStr());
   while(cur<=endLimit&&remainingCount>0){
-    const ds=cur.toISOString().split('T')[0];
+    const ds=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
     if(cur>=today&&!doneDates.has(ds)){
       const nt={...tmpl,id:Date.now()+Math.random()*1000,done:false,isTemplate:false,templateId:tmpl.id,created:Date.now(),date:ds};
       newInstances.push(nt);
@@ -700,15 +702,25 @@ function pickRecur(prefix,el){
   document.querySelectorAll('#'+pid+' .pick-chip').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   document.getElementById(cid).classList.toggle('show',el.dataset.v==='custom');
-  document.getElementById(eid).style.display=el.dataset.v==='none'?'none':'block';
+  const isRecur=el.dataset.v!=='none';
+  document.getElementById(eid).style.display=isRecur?'block':'none';
+  if(isRecur){
+    // Reset end options to "Nie" and hide sub-boxes
+    document.querySelectorAll('#'+eid+' .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v==='never'));
+    document.getElementById(prefix+'EndCount').style.display='none';
+    document.getElementById(prefix+'EndDate').style.display='none';
+  }
 }
 function pickEnd(prefix,el){
   const pid=prefix==='a'?'aEndBox':'eEndBox';
   document.querySelectorAll('#'+pid+' .pick-chip').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   const v=el.dataset.v;
-  document.getElementById(prefix+'EndCount').style.display=v==='count'?'block':'none';
-  document.getElementById(prefix+'EndDate').style.display=v==='date'?'block':'none';
+  // Always hide both first, then show the right one
+  document.getElementById(prefix+'EndCount').style.display='none';
+  document.getElementById(prefix+'EndDate').style.display='none';
+  if(v==='count') document.getElementById(prefix+'EndCount').style.display='block';
+  if(v==='date') document.getElementById(prefix+'EndDate').style.display='block';
 }
 function getEndVal(prefix){
   const active=document.querySelector('#'+prefix+'EndBox .pick-chip.active');
