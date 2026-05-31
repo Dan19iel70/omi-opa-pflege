@@ -308,10 +308,10 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
   <div class="modal">
     <h3>📅 In Kalender</h3>
     <div class="task-info-box"><div class="tib-title" id="calTitle">–</div><div class="tib-date" id="calDate">–</div></div>
-    <div class="cal-hint">💡 <strong>Outlook Desktop:</strong> .ics laden → Doppelklick<br>💡 <strong>Outlook Web:</strong> Button unten</div>
+    <div class="cal-hint">💡 <strong>iPhone/iPad &amp; Android:</strong> Button «📲 In Kalender (iOS / Android)» → Share-Sheet → Kalender wählen<br>💡 <strong>Outlook Desktop / Apple Mac:</strong> .ics laden → Doppelklick</div>
     <div class="modal-actions">
+      <button class="modal-btn sage" onclick="toICS()">📲 In Kalender (iOS / Android / Desktop)</button>
       <button class="modal-btn outlook" onclick="toOutlook()">📧 Outlook Web / Office 365</button>
-      <button class="modal-btn warm" onclick="toICS()">📥 .ics (Outlook Desktop &amp; Apple)</button>
       <button class="modal-btn warm" onclick="toGoogle()">🗓 Google Kalender</button>
       <button class="modal-btn ghost" onclick="closeOverlay('calOverlay')">Schliessen</button>
     </div>
@@ -342,7 +342,10 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
         <div class="pick-chip" data-v="coiffeur" onclick="pickCat('e',this)">✂️ Coiffeur</div>
       </div>
     </div>
-    <div class="field"><label>Zuständig</label><input type="text" id="eWho" maxlength="20" list="eWhoList" autocomplete="off"><datalist id="eWhoList"></datalist></div>
+    <div class="field"><label>Zuständig</label>
+      <div class="chip-picker" id="eWhoChips" style="margin-bottom:6px;"></div>
+      <input type="text" id="eWho" maxlength="20" autocomplete="off" placeholder="oder anderen Namen tippen" oninput="syncWhoChips('e')">
+    </div>
     <div id="eRecurInfo" style="display:none;background:var(--warm);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:8px;">
       🔁 <span id="eRecurInfoText"></span><br>
       <span style="font-size:11px;">Wiederkehrend-Einstellungen können nicht bearbeitet werden.<br>Lösche die Vorlage und erstelle eine neue um sie zu ändern.</span>
@@ -356,7 +359,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
-      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.3</div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.4</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -431,7 +434,10 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
           <div class="pick-chip" data-v="coiffeur" onclick="pickCat('a',this)">✂️ Coiffeur</div>
         </div>
       </div>
-      <div class="field"><label>Zuständig</label><input type="text" id="aWho" placeholder="Wer?" maxlength="20" list="aWhoList" autocomplete="off"><datalist id="aWhoList"></datalist></div>
+      <div class="field"><label>Zuständig</label>
+        <div class="chip-picker" id="aWhoChips" style="margin-bottom:6px;"></div>
+        <input type="text" id="aWho" placeholder="oder anderen Namen tippen" maxlength="20" autocomplete="off" oninput="syncWhoChips('a')">
+      </div>
       <div class="field"><label>Wiederkehrend</label>
         <div class="chip-picker" id="aRecurPicker">
           <div class="pick-chip active" data-v="none" onclick="pickRecur('a',this)">Einmalig</div>
@@ -600,11 +606,36 @@ function subscribeUsers(){
 }
 function updateAllWhoLists(){
   const all=[...new Set([myName,...registeredUsers].filter(Boolean))].sort();
-  const opts=all.map(p=>`<option value="${esc(p)}">`).join('');
-  ['aWhoList','eWhoList','setupNameList'].forEach(id=>{
-    const dl=document.getElementById(id);
-    if(dl)dl.innerHTML=opts;
-  });
+  // setupNameList bleibt als datalist (Eingabe vor App-Init, kein Chip-Picker noetig)
+  const dl=document.getElementById('setupNameList');
+  if(dl)dl.innerHTML=all.map(p=>`<option value="${esc(p)}">`).join('');
+  renderWhoChips('a');renderWhoChips('e');
+}
+
+// ===== ZUSTAENDIG CHIP-PICKER =====
+function getWhoPool(){
+  const fromTasks=tasks.filter(t=>t.who).map(t=>t.who);
+  return [...new Set([myName,...registeredUsers,...fromTasks].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
+}
+function renderWhoChips(prefix){
+  const picker=document.getElementById(prefix+'WhoChips');
+  if(!picker)return;
+  const input=document.getElementById(prefix+'Who');
+  const current=input?input.value.trim():'';
+  const people=getWhoPool();
+  picker.innerHTML=people.map(p=>{
+    const safe=esc(p).replace(/'/g,"\\'");
+    return `<div class="pick-chip${current===p?' active':''}" onclick="pickWho('${prefix}','${safe}')">👤 ${esc(p)}</div>`;
+  }).join('');
+}
+function pickWho(prefix,name){
+  const input=document.getElementById(prefix+'Who');
+  if(input)input.value=name;
+  renderWhoChips(prefix);
+}
+function syncWhoChips(prefix){
+  // Wird beim Tippen aufgerufen — aktualisiert nur den active-Status der Chips
+  renderWhoChips(prefix);
 }
 
 // ===== PULL TO REFRESH =====
@@ -658,6 +689,7 @@ function initApp(){
   document.getElementById('aWho').value=myName;
   document.getElementById('aDate').value=todayStr();
   loadTasks();spawnRecurring();renderAll();
+  renderWhoChips('a');
   const now=new Date();calYear=now.getFullYear();calMonth=now.getMonth();
   // Show timerange bar for default 'offen' tab
   document.getElementById('timerangeBar').style.display='flex';
@@ -950,6 +982,7 @@ function openEdit(id){
   document.getElementById('eCat').value=t.cat||'sonstiges';
   document.querySelectorAll('#eCatPicker .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===(t.cat||'sonstiges')));
   document.getElementById('eWho').value=t.who||'';
+  renderWhoChips('e');
   // Show recur info as read-only
   const infoBox=document.getElementById('eRecurInfo');
   if(t.isTemplate&&t.recur&&t.recur!=='none'){
@@ -1083,11 +1116,8 @@ function updatePersonChips(){
     el.onclick=()=>setPerson(p,el);
     row.appendChild(el);
   });
-  // Update datalists
-  // Always include own name
-  const allPeople=[...new Set([myName,...people])].sort();
-  const opts=allPeople.map(p=>`<option value="${p}">`).join('');
-  ['aWhoList','eWhoList'].forEach(id=>{const dl=document.getElementById(id);if(dl)dl.innerHTML=opts;});
+  // Zustaendig-Chip-Picker neu rendern (Tasks koennen neue Namen eingebracht haben)
+  if(typeof renderWhoChips==='function'){renderWhoChips('a');renderWhoChips('e');}
 }
 
 // RENDER TASKS
@@ -1228,11 +1258,34 @@ function buildICS(t){
     `SUMMARY:${t.title} (Omi & Opa)`,t.note?`DESCRIPTION:${t.note.replace(/\n/g,'\\n')}`:'',
     t.who?`COMMENT:Zuständig: ${t.who}`:'','END:VEVENT','END:VCALENDAR'].filter(Boolean).join('\r\n');
 }
-function toICS(){
+async function toICS(){
   const t=tasks.find(t=>String(t.id)===String(calTaskId));if(!t)return;
-  const blob=new Blob([buildICS(t)],{type:'text/calendar'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=t.title.replace(/\s+/g,'_')+'.ics';a.click();
+  const ics=buildICS(t);
+  const filename=(t.title||'termin').replace(/[^\w\s-]/g,'').replace(/\s+/g,'_').slice(0,40)+'.ics';
+  // 1) Web Share API mit Datei — iOS Safari 15+, Android Chrome 89+
+  try{
+    const file=new File([ics],filename,{type:'text/calendar'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:t.title,text:'Omi & Opa Termin'});
+      closeOverlay('calOverlay');return;
+    }
+  }catch(e){
+    if(e&&e.name==='AbortError'){closeOverlay('calOverlay');return;}
+    console.warn('Web Share fehlgeschlagen, fallback:',e);
+  }
+  // 2) iOS-Fallback (kein File-Share): data-URI im selben Tab → iOS bietet "In Kalender" an
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  if(isIOS){
+    window.location.href='data:text/calendar;charset=utf-8,'+encodeURIComponent(ics);
+    closeOverlay('calOverlay');return;
+  }
+  // 3) Desktop / Android-Fallback: Blob + download-Attribute
+  const blob=new Blob([ics],{type:'text/calendar;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
   closeOverlay('calOverlay');
 }
 function toOutlook(){
