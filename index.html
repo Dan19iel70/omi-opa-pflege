@@ -243,7 +243,7 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
 
 <div class="ptr-spinner" id="ptrSpinner">↻</div>
 
-<!-- Firebase -->
+<!-- Firebase Init (Module Scope — keep minimal) -->
 <script type="module">
   import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import{getFirestore,collection,doc,onSnapshot,setDoc,deleteDoc}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -261,200 +261,6 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
   window._onSnapshot=onSnapshot;window._setDoc=setDoc;window._deleteDoc=deleteDoc;
   window._fbReady=true;
   window.dispatchEvent(new Event('fbReady'));
-// PULL TO REFRESH
-(function(){
-  let startY=0, pulling=false, threshold=80;
-  const spinner=document.getElementById('ptrSpinner');
-
-  document.addEventListener('touchstart', e=>{
-    if(window.scrollY===0) startY=e.touches[0].clientY;
-  },{passive:true});
-
-  document.addEventListener('touchmove', e=>{
-    if(!startY) return;
-    const dy=e.touches[0].clientY - startY;
-    if(dy>10 && window.scrollY===0){
-      pulling=true;
-      spinner.classList.add('visible');
-      if(dy>threshold) spinner.style.opacity='1';
-      else spinner.style.opacity=dy/threshold;
-    }
-  },{passive:true});
-
-  document.addEventListener('touchend', e=>{
-    if(!pulling){startY=0;return;}
-    const dy=e.changedTouches[0].clientY - startY;
-    if(dy>threshold){
-      spinner.classList.add('spinning');
-      // Reload data from Firebase
-      if(window._unsub) window._unsub();
-      if(typeof subscribeFirebase==='function') subscribeFirebase();
-      if(typeof spawnRecurring==='function') spawnRecurring();
-      setTimeout(()=>{
-        spinner.classList.remove('spinning','visible');
-        spinner.style.opacity='1';
-      },1200);
-    } else {
-      spinner.classList.remove('visible');
-    }
-    pulling=false;startY=0;
-  },{passive:true});
-})();
-
-
-// ===== CHAT & ACTIVITY FEED =====
-let chatMessages = [];
-let lastReadChat = parseInt(localStorage.getItem('pk_lastReadChat') || '0');
-let chatUnsub = null;
-
-function subscribeChat() {
-  waitForFirebase(()=>{
-  const kreisId = getKreisId();
-  const col = window._col(window._db, 'kreise', kreisId, 'chat');
-  chatUnsub = window._onSnapshot(col, snap => {
-    chatMessages = snap.docs.map(d => d.data()).sort((a,b) => a.ts - b.ts);
-    renderChat();
-    updateChatBadge();
-  });
-  }); // end waitForFirebase
-}
-
-function sendChat(text) {
-  const input = document.getElementById('chatInput');
-  const msg = text || input.value.trim();
-  if(!msg) return;
-  input.value = '';
-  const m = {
-    id: Date.now(),
-    text: msg,
-    from: myName,
-    ts: Date.now(),
-    type: 'message'
-  };
-  chatMessages.push(m);
-  renderChat();
-  // Save to Firebase
-  if(window._fbReady && window._db) {
-    const r = window._doc(window._db, 'kreise', getKreisId(), 'chat', String(m.id));
-    window._setDoc(r, m);
-  }
-}
-
-function logActivity(text) {
-  const m = {
-    id: Date.now() + Math.random(),
-    text,
-    from: myName,
-    ts: Date.now(),
-    type: 'activity'
-  };
-  chatMessages.push(m);
-  renderChat();
-  if(window._fbReady && window._db) {
-    const r = window._doc(window._db, 'kreise', getKreisId(), 'chat', String(m.id));
-    window._setDoc(r, m);
-  }
-}
-
-function renderChat() {
-  const container = document.getElementById('chatMessages');
-  if(!container) return;
-  if(!chatMessages.length) {
-    container.innerHTML = '<div class="chat-empty">Noch keine Nachrichten.<br>Schreib etwas! 👋</div>';
-    return;
-  }
-  container.innerHTML = chatMessages.map(m => {
-    const time = new Date(m.ts).toLocaleTimeString('de-CH', {hour:'2-digit', minute:'2-digit'});
-    const date = new Date(m.ts).toLocaleDateString('de-CH', {day:'numeric', month:'short'});
-    if(m.type === 'activity') {
-      return `<div class="chat-msg activity">📌 ${esc(m.text)} · ${time}</div>`;
-    }
-    const isMine = m.from === myName;
-    return `<div class="chat-msg ${isMine ? 'mine' : 'theirs'}">
-      ${!isMine ? `<div class="chat-msg-name">${esc(m.from)}</div>` : ''}
-      ${esc(m.text)}
-      <div class="chat-msg-time">${time}</div>
-    </div>`;
-  }).join('');
-  // Scroll to bottom
-  container.scrollTop = container.scrollHeight;
-  // Update last read
-  if(currentTab === 'chat' && chatMessages.length) {
-    lastReadChat = chatMessages[chatMessages.length-1].ts;
-    localStorage.setItem('pk_lastReadChat', lastReadChat);
-    updateChatBadge();
-  }
-}
-
-function updateChatBadge() {
-  const unread = chatMessages.filter(m => m.ts > lastReadChat && m.from !== myName).length;
-  const badge = document.getElementById('chatBadge');
-  if(!badge) return;
-  if(unread > 0) {
-    badge.style.display = 'inline';
-    badge.textContent = unread > 9 ? '9+' : unread;
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-// Takeover task
-function takeoverTask(id) {
-  // Use string comparison to avoid float precision issues
-  const t = tasks.find(t => String(t.id) === String(id)); 
-  if(!t) { console.warn('Task not found:', id); return; }
-  const oldWho = t.who;
-  if(oldWho === myName) return;
-  t.who = myName;
-  renderAll(); // Show immediately
-  saveTask(t); // Sync to Firebase
-  updatePersonChips();
-  logActivity(`${myName} hat die Aufgabe «${t.title}» von ${oldWho||'?'} übernommen`);
-}
-
-// Send on Enter
-document.addEventListener('keydown', e => {
-  if(e.key === 'Enter' && document.activeElement.id === 'chatInput') sendChat();
-});
-
-// Subscribe chat when app starts
-const origInitApp = window.initApp;
-
-
-// ===== REGISTERED USERS =====
-function waitForFirebase(cb){
-  if(window._fbReady&&window._db){cb();return;}
-  window.addEventListener('fbReady',cb,{once:true});
-}
-
-async function registerUser(){
-  waitForFirebase(async()=>{
-    if(!myName)return;
-    const r=window._doc(window._db,'kreise',getKreisId(),'users',myName);
-    await window._setDoc(r,{name:myName,lastSeen:Date.now()});
-  });
-}
-
-function subscribeUsers(){
-  waitForFirebase(()=>{
-    const col=window._col(window._db,'kreise',getKreisId(),'users');
-    window._onSnapshot(col,snap=>{
-      registeredUsers=snap.docs.map(d=>d.data().name).sort();
-      updateAllWhoLists();
-      updatePersonChips();
-    });
-  });
-}
-
-function updateAllWhoLists(){
-  // Always include myName + all registered users
-  const all=[...new Set([myName,...registeredUsers])].sort();
-  const opts=all.map(p=>`<option value="${p}">`).join('');
-  ['aWhoList','eWhoList','setupNameList'].forEach(id=>{
-    const dl=document.getElementById(id);
-    if(dl)dl.innerHTML=opts;
-  });
-}
 </script>
 
 <!-- SETUP -->
@@ -550,7 +356,7 @@ function updateAllWhoLists(){
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
-      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.2</div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.3</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -694,6 +500,140 @@ let myName='',tasks=[],registeredUsers=[],currentTab='offen',currentCat='alle',c
 const _pendingDeletes=new Set(); // Track IDs deleted locally but not yet in Firebase
 let calYear,calMonth,calSelDay=null,calTaskId=null,editTaskId=null,confirmCb=null;
 let _unsub=null,_kreisId=null;
+let chatMessages=[],lastReadChat=parseInt(localStorage.getItem('pk_lastReadChat')||'0'),chatUnsub=null;
+
+// ===== FIREBASE TIMING HELPER =====
+function waitForFirebase(cb){
+  if(window._fbReady&&window._db){cb();return;}
+  window.addEventListener('fbReady',cb,{once:true});
+}
+
+// ===== CHAT & ACTIVITY FEED =====
+function subscribeChat(){
+  waitForFirebase(()=>{
+    if(chatUnsub)chatUnsub();
+    const col=window._col(window._db,'kreise',getKreisId(),'chat');
+    chatUnsub=window._onSnapshot(col,snap=>{
+      chatMessages=snap.docs.map(d=>d.data()).sort((a,b)=>a.ts-b.ts);
+      renderChat();updateChatBadge();
+    });
+  });
+}
+function sendChat(text){
+  const input=document.getElementById('chatInput');
+  const msg=text||input.value.trim();
+  if(!msg)return;
+  input.value='';
+  const m={id:Date.now()+Math.floor(Math.random()*1000),text:msg,from:myName,ts:Date.now(),type:'message'};
+  chatMessages.push(m);renderChat();
+  waitForFirebase(()=>{
+    const r=window._doc(window._db,'kreise',getKreisId(),'chat',String(m.id));
+    window._setDoc(r,m).catch(e=>console.warn('chat save:',e));
+  });
+}
+function logActivity(text){
+  const m={id:Date.now()+Math.floor(Math.random()*1000),text,from:myName,ts:Date.now(),type:'activity'};
+  chatMessages.push(m);renderChat();
+  waitForFirebase(()=>{
+    const r=window._doc(window._db,'kreise',getKreisId(),'chat',String(m.id));
+    window._setDoc(r,m).catch(e=>console.warn('activity save:',e));
+  });
+}
+function renderChat(){
+  const container=document.getElementById('chatMessages');
+  if(!container)return;
+  if(!chatMessages.length){
+    container.innerHTML='<div class="chat-empty">Noch keine Nachrichten.<br>Schreib etwas! 👋</div>';
+    return;
+  }
+  container.innerHTML=chatMessages.map(m=>{
+    const time=new Date(m.ts).toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'});
+    if(m.type==='activity')return `<div class="chat-msg activity">📌 ${esc(m.text)} · ${time}</div>`;
+    const isMine=m.from===myName;
+    return `<div class="chat-msg ${isMine?'mine':'theirs'}">${!isMine?`<div class="chat-msg-name">${esc(m.from)}</div>`:''}${esc(m.text)}<div class="chat-msg-time">${time}</div></div>`;
+  }).join('');
+  container.scrollTop=container.scrollHeight;
+  if(currentTab==='chat'&&chatMessages.length){
+    lastReadChat=chatMessages[chatMessages.length-1].ts;
+    localStorage.setItem('pk_lastReadChat',lastReadChat);
+    updateChatBadge();
+  }
+}
+function updateChatBadge(){
+  const unread=chatMessages.filter(m=>m.ts>lastReadChat&&m.from!==myName).length;
+  const badge=document.getElementById('chatBadge');
+  if(!badge)return;
+  if(unread>0){badge.style.display='inline';badge.textContent=unread>9?'9+':unread;}
+  else badge.style.display='none';
+}
+
+// ===== TAKEOVER =====
+function takeoverTask(id){
+  const t=tasks.find(t=>String(t.id)===String(id));
+  if(!t){console.warn('takeoverTask: id not found',id);return;}
+  const oldWho=t.who;
+  if(oldWho===myName)return;
+  t.who=myName;
+  saveTask(t);
+  renderAll();
+  logActivity(`${myName} hat die Aufgabe «${t.title}» von ${oldWho||'?'} übernommen`);
+}
+
+// ===== REGISTERED USERS =====
+function registerUser(){
+  waitForFirebase(async()=>{
+    if(!myName)return;
+    const r=window._doc(window._db,'kreise',getKreisId(),'users',myName);
+    try{await window._setDoc(r,{name:myName,lastSeen:Date.now()});}
+    catch(e){console.warn('registerUser:',e);}
+  });
+}
+function subscribeUsers(){
+  waitForFirebase(()=>{
+    const col=window._col(window._db,'kreise',getKreisId(),'users');
+    window._onSnapshot(col,snap=>{
+      registeredUsers=snap.docs.map(d=>d.data().name).filter(Boolean).sort();
+      updateAllWhoLists();
+      updatePersonChips();
+    });
+  });
+}
+function updateAllWhoLists(){
+  const all=[...new Set([myName,...registeredUsers].filter(Boolean))].sort();
+  const opts=all.map(p=>`<option value="${esc(p)}">`).join('');
+  ['aWhoList','eWhoList','setupNameList'].forEach(id=>{
+    const dl=document.getElementById(id);
+    if(dl)dl.innerHTML=opts;
+  });
+}
+
+// ===== PULL TO REFRESH =====
+(function(){
+  let startY=0,pulling=false;const threshold=80;
+  const spinner=document.getElementById('ptrSpinner');
+  if(!spinner)return;
+  document.addEventListener('touchstart',e=>{if(window.scrollY===0)startY=e.touches[0].clientY;},{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!startY)return;
+    const dy=e.touches[0].clientY-startY;
+    if(dy>10&&window.scrollY===0){
+      pulling=true;spinner.classList.add('visible');
+      spinner.style.opacity=dy>threshold?'1':String(dy/threshold);
+    }
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(!pulling){startY=0;return;}
+    const dy=e.changedTouches[0].clientY-startY;
+    if(dy>threshold){
+      spinner.classList.add('spinning');
+      if(_unsub)_unsub();
+      if(typeof subscribeFirebase==='function')subscribeFirebase();
+      if(typeof spawnRecurring==='function')spawnRecurring();
+      setTimeout(()=>{spinner.classList.remove('spinning','visible');spinner.style.opacity='1';},1200);
+    }else spinner.classList.remove('visible');
+    pulling=false;startY=0;
+  },{passive:true});
+})();
 
 // SETUP
 
@@ -980,31 +920,28 @@ function addTask(){
 }
 
 // ACTIONS
-function toggleDone(id){const t=tasks.find(t=>t.id===id);if(t){t.done=!t.done;renderAll();saveTask(t);}}
+function toggleDone(id){const idStr=String(id);const t=tasks.find(t=>String(t.id)===idStr);if(t){t.done=!t.done;renderAll();saveTask(t);}}
 function deleteTask(id){
-  const t=tasks.find(t=>t.id===id);if(!t)return;
-  const title=t.title.length>30?t.title.slice(0,30)+'…':t.title;
-  // Find future instances - compare as strings to avoid type mismatch
   const idStr=String(id);
+  const t=tasks.find(t=>String(t.id)===idStr);if(!t)return;
+  const title=t.title.length>30?t.title.slice(0,30)+'…':t.title;
   const instances=tasks.filter(x=>String(x.templateId)===idStr&&!x.done);
   const msg=t.isTemplate&&instances.length>0
     ?`«${title}» und ${instances.length} zukünftige Einträge werden gelöscht.`
     :`«${title}» wird unwiderruflich gelöscht.`;
   showConfirm('Löschen?',msg,async()=>{
     if(t.isTemplate){
-      // Remove all future instances from local array
       tasks=tasks.filter(x=>String(x.templateId)!==idStr||x.done);
-      // Delete from Firebase in background
       instances.forEach(x=>removeTask(x.id));
     }
-    // Remove template itself
-    tasks=tasks.filter(x=>x.id!==id);
+    tasks=tasks.filter(x=>String(x.id)!==idStr);
     renderAll();
     removeTask(id);
   });
 }
 function openEdit(id){
-  const t=tasks.find(t=>t.id===id);if(!t)return;
+  const idStr=String(id);
+  const t=tasks.find(t=>String(t.id)===idStr);if(!t)return;
   editTaskId=id;
   document.getElementById('eTitle').value=t.title||'';
   document.getElementById('eNote').value=t.note||'';
@@ -1031,7 +968,7 @@ function openEdit(id){
 function saveEdit(){
   const title=document.getElementById('eTitle').value.trim();
   if(!title)return;
-  const t=tasks.find(t=>t.id===editTaskId);if(!t)return;
+  const t=tasks.find(t=>String(t.id)===String(editTaskId));if(!t)return;
   const recur=getPickerVal('eRecurPicker');
   const wasTemplate=t.isTemplate;
   const oldId=String(t.id);
@@ -1206,8 +1143,9 @@ function mkCard(t){
   if(!t.done){const c=CAT_COLORS[t.cat]||'#A09080';card.style.borderLeft=`4px solid ${c}`;}
   const ds=fmtDate(t.date,t.time);
   const rl=recurLabel(t);
+  const idAttr=String(t.id);
   card.innerHTML=`
-    <button class="check-btn" onclick="toggleDone(${t.id})">${t.done?'✓':''}</button>
+    <button class="check-btn" onclick="toggleDone('${idAttr}')">${t.done?'✓':''}</button>
     <div class="task-body">
       <div class="task-title">${esc(t.title)}${t.isTemplate?'<span style="font-size:10px;color:var(--muted);margin-left:4px">(Vorlage)</span>':''}</div>
       ${t.note?`<div class="task-note">${esc(t.note)}</div>`:''}
@@ -1218,12 +1156,12 @@ function mkCard(t){
         ${rl?`<span class="badge badge-recur">🔁 ${rl}</span>`:''}
         ${isUrgent(t)&&!t.done?`<span class="badge badge-urgent">⚡ Heute!</span>`:''}
       </div>
-      ${!t.done&&t.who!==myName?`<div class="takeover-btn" onclick="takeoverTask('${t.id}')">✋ Ich übernehme</div>`:''}
+      ${!t.done&&t.who!==myName?`<div class="takeover-btn" onclick="takeoverTask('${idAttr}')">✋ Ich übernehme</div>`:''}
     </div>
     <div class="task-actions">
-      <button class="task-btn" onclick="openEdit(${t.id})">✏️</button>
-      ${t.date&&!t.done?`<button class="task-btn" onclick="openCalExport(${t.id})">📅</button>`:''}
-      <button class="task-btn del" onclick="deleteTask(${t.id})">✕</button>
+      <button class="task-btn" onclick="openEdit('${idAttr}')">✏️</button>
+      ${t.date&&!t.done?`<button class="task-btn" onclick="openCalExport('${idAttr}')">📅</button>`:''}
+      <button class="task-btn del" onclick="deleteTask('${idAttr}')">✕</button>
     </div>`;
   return card;
 }
@@ -1267,14 +1205,14 @@ function showCalDay(ds,dt){
       <div class="cal-ev-dot" style="background:${CAT_COLORS[t.cat]||'#A09080'}"></div>
       <div class="cal-ev-info"><div class="cal-ev-title">${esc(t.title)}</div>
       <div class="cal-ev-meta">${t.time?t.time+' Uhr · ':''}👤 ${esc(t.who||'–')} · ${CAT_LABELS[t.cat]||'Sonstiges'}</div></div>
-      <button class="cal-ev-btn" onclick="openCalExport(${t.id})">📅</button>
+      <button class="cal-ev-btn" onclick="openCalExport('${String(t.id)}')">📅</button>
     </div>`).join('');
 }
 
 // CAL EXPORT
 function openCalExport(id){
   calTaskId=id;
-  const t=tasks.find(t=>t.id===id);if(!t)return;
+  const t=tasks.find(t=>String(t.id)===String(id));if(!t)return;
   document.getElementById('calTitle').textContent=t.title;
   document.getElementById('calDate').textContent=fmtDate(t.date,t.time)||'Kein Datum';
   document.getElementById('calOverlay').classList.add('open');
@@ -1291,14 +1229,14 @@ function buildICS(t){
     t.who?`COMMENT:Zuständig: ${t.who}`:'','END:VEVENT','END:VCALENDAR'].filter(Boolean).join('\r\n');
 }
 function toICS(){
-  const t=tasks.find(t=>t.id===calTaskId);if(!t)return;
+  const t=tasks.find(t=>String(t.id)===String(calTaskId));if(!t)return;
   const blob=new Blob([buildICS(t)],{type:'text/calendar'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download=t.title.replace(/\s+/g,'_')+'.ics';a.click();
   closeOverlay('calOverlay');
 }
 function toOutlook(){
-  const t=tasks.find(t=>t.id===calTaskId);if(!t)return;
+  const t=tasks.find(t=>String(t.id)===String(calTaskId));if(!t)return;
   let se,ee;
   if(t.time){const s=new Date(t.date+'T'+t.time);const e=new Date(s.getTime()+3600000);se=encodeURIComponent(s.toISOString().slice(0,16));ee=encodeURIComponent(e.toISOString().slice(0,16));}
   else{se=encodeURIComponent(t.date);ee=encodeURIComponent(t.date);}
@@ -1306,7 +1244,7 @@ function toOutlook(){
   closeOverlay('calOverlay');
 }
 function toGoogle(){
-  const t=tasks.find(t=>t.id===calTaskId);if(!t)return;
+  const t=tasks.find(t=>String(t.id)===String(calTaskId));if(!t)return;
   let dates;
   if(t.time){const s=new Date(t.date+'T'+t.time);const e=new Date(s.getTime()+3600000);dates=s.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z/'+e.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';}
   else{const d=t.date.replace(/-/g,'');dates=d+'/'+d;}
@@ -1336,6 +1274,7 @@ function closeOverlay(id){document.getElementById(id).classList.remove('open');}
 // KEYBOARD
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&document.activeElement.id==='aTitle')addTask();
+  if(e.key==='Enter'&&document.activeElement.id==='chatInput'){sendChat();}
   if(e.key==='Escape'){['shareOverlay','calOverlay','editOverlay'].forEach(id=>closeOverlay(id));closeConfirm();}
   if(e.key==='Enter'&&document.getElementById('setupScreen').style.display!=='none'&&!document.getElementById('setupBtn').disabled)startApp();
 });
