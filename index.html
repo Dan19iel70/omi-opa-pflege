@@ -261,7 +261,6 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
   window._onSnapshot=onSnapshot;window._setDoc=setDoc;window._deleteDoc=deleteDoc;
   window._fbReady=true;
   window.dispatchEvent(new Event('fbReady'));
-
 // PULL TO REFRESH
 (function(){
   let startY=0, pulling=false, threshold=80;
@@ -309,7 +308,7 @@ let lastReadChat = parseInt(localStorage.getItem('pk_lastReadChat') || '0');
 let chatUnsub = null;
 
 function subscribeChat() {
-  if(!window._fbReady || !window._db) return;
+  waitForFirebase(()=>{
   const kreisId = getKreisId();
   const col = window._col(window._db, 'kreise', kreisId, 'chat');
   chatUnsub = window._onSnapshot(col, snap => {
@@ -317,6 +316,7 @@ function subscribeChat() {
     renderChat();
     updateChatBadge();
   });
+  }); // end waitForFirebase
 }
 
 function sendChat(text) {
@@ -422,19 +422,27 @@ const origInitApp = window.initApp;
 
 
 // ===== REGISTERED USERS =====
+function waitForFirebase(cb){
+  if(window._fbReady&&window._db){cb();return;}
+  window.addEventListener('fbReady',cb,{once:true});
+}
+
 async function registerUser(){
-  if(!window._fbReady||!window._db||!myName)return;
-  const r=window._doc(window._db,'kreise',getKreisId(),'users',myName);
-  await window._setDoc(r,{name:myName,lastSeen:Date.now()});
+  waitForFirebase(async()=>{
+    if(!myName)return;
+    const r=window._doc(window._db,'kreise',getKreisId(),'users',myName);
+    await window._setDoc(r,{name:myName,lastSeen:Date.now()});
+  });
 }
 
 function subscribeUsers(){
-  if(!window._fbReady||!window._db)return;
-  const col=window._col(window._db,'kreise',getKreisId(),'users');
-  window._onSnapshot(col,snap=>{
-    registeredUsers=snap.docs.map(d=>d.data().name).sort();
-    updateAllWhoLists();
-    updatePersonChips();
+  waitForFirebase(()=>{
+    const col=window._col(window._db,'kreise',getKreisId(),'users');
+    window._onSnapshot(col,snap=>{
+      registeredUsers=snap.docs.map(d=>d.data().name).sort();
+      updateAllWhoLists();
+      updatePersonChips();
+    });
   });
 }
 
@@ -447,7 +455,6 @@ function updateAllWhoLists(){
     if(dl)dl.innerHTML=opts;
   });
 }
-
 </script>
 
 <!-- SETUP -->
@@ -543,7 +550,7 @@ function updateAllWhoLists(){
 <header id="mainHeader" style="display:none">
   <div class="header-top">
     <div class="logo">Omi &amp; <span>Opa</span></div>
-      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.1</div>
+      <div style="font-size:10px;color:var(--sand);margin-top:1px;">v2.2</div>
     <div style="display:flex;align-items:center;gap:8px">
       <span id="fbStatus" style="font-size:16px" title="Firebase">⏳</span>
       <button class="share-btn" onclick="openShare()">🔗 Teilen</button>
@@ -766,10 +773,8 @@ function subscribeFirebase(){
   document.getElementById('fbStatus').textContent='☁️';
 }
 window.addEventListener('fbReady',()=>{
-  if(typeof initApp!=='undefined'&&document.getElementById('mainContent').style.display!=='none'){
+  if(document.getElementById('mainContent').style.display!=='none'){
     subscribeFirebase();
-    registerUser();
-    subscribeUsers();
   }
 });
 
