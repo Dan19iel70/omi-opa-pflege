@@ -326,6 +326,24 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
         <div class="pick-chip" data-v="custom" onclick="pickRecur('e',this)">Eigener…</div>
       </div>
       <div class="custom-interval" id="eCustomBox"><span>Alle</span><input type="number" id="eCustomDays" min="1" max="365" value="4"><span>Tage</span></div>
+      <div class="recur-end" id="eEndBox" style="display:none;margin-top:8px;">
+        <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:4px;">Endet</label>
+        <div class="chip-picker">
+          <div class="pick-chip active" data-v="never" onclick="pickEnd('e',this)">Nie</div>
+          <div class="pick-chip" data-v="count" onclick="pickEnd('e',this)">Nach X-mal</div>
+          <div class="pick-chip" data-v="date" onclick="pickEnd('e',this)">An Datum</div>
+        </div>
+        <div id="eEndCount" style="display:none;margin-top:6px;">
+          <div style="display:flex;align-items:center;gap:8px;background:var(--warm);border-radius:10px;padding:8px 11px;">
+            <span style="font-size:13px;">Nach</span>
+            <input type="number" id="eEndCountVal" min="1" max="999" value="10" style="width:60px;padding:5px 7px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;text-align:center;background:white;">
+            <span style="font-size:13px;">Mal</span>
+          </div>
+        </div>
+        <div id="eEndDate" style="display:none;margin-top:6px;">
+          <input type="date" id="eEndDateVal" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-family:DM Sans,sans-serif;font-size:14px;background:var(--cream);">
+        </div>
+      </div>
     </div>
     <button class="edit-save-btn" onclick="saveEdit()">💾 Speichern</button>
     <button class="edit-cancel-btn" onclick="closeOverlay('editOverlay')">Abbrechen</button>
@@ -420,6 +438,22 @@ main{padding:14px 14px 100px;width:100%;max-width:100%;}
           <div class="pick-chip" data-v="custom" onclick="pickRecur('a',this)">Eigener…</div>
         </div>
         <div class="custom-interval" id="aCustomBox"><span>Alle</span><input type="number" id="aCustomDays" min="1" max="365" value="4"><span>Tage</span></div>
+      <div class="recur-end" id="aEndBox" style="display:none;margin-top:8px;">
+        <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:4px;">Endet</label>
+        <div class="chip-picker">
+          <div class="pick-chip active" data-v="never" onclick="pickEnd('a',this)">Nie</div>
+          <div class="pick-chip" data-v="count" onclick="pickEnd('a',this)">Nach X-mal</div>
+          <div class="pick-chip" data-v="date" onclick="pickEnd('a',this)">An Datum</div>
+        </div>
+        <div id="aEndCount" style="display:none;margin-top:6px;display:flex;align-items:center;gap:8px;background:var(--warm);border-radius:10px;padding:8px 11px;">
+          <span style="font-size:13px;">Nach</span>
+          <input type="number" id="aEndCountVal" min="1" max="999" value="10" style="width:60px;padding:5px 7px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;text-align:center;background:white;">
+          <span style="font-size:13px;">Mal</span>
+        </div>
+        <div id="aEndDate" style="display:none;margin-top:6px;">
+          <input type="date" id="aEndDateVal" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-family:DM Sans,sans-serif;font-size:14px;background:var(--cream);">
+        </div>
+      </div>
       </div>
       <button class="add-btn" onclick="addTask()">Aufgabe hinzufügen</button>
     </div>
@@ -545,24 +579,30 @@ function spawnRecurring(){
   templates.forEach(tmpl=>{
     const days=recurDays(tmpl);
     const startDate=new Date(tmpl.date||todayStr());startDate.setHours(0,0,0,0);
-    // Find all existing spawned instances of this template
-    const existingDates=new Set(
-      tasks.filter(t=>t.templateId===tmpl.id&&!t.isTemplate).map(t=>t.date)
-    );
-    // Generate all occurrences for next 6 months
-    let cur=new Date(startDate);
-    while(cur<=sixMonths){
+    const existingInstances=tasks.filter(t=>t.templateId===tmpl.id&&!t.isTemplate);
+    const existingDates=new Set(existingInstances.map(t=>t.date));
+    const doneCount=existingInstances.filter(t=>t.done).length;
+    // Determine end limit
+    let endLimit=sixMonths;
+    if(tmpl.endType==='date'&&tmpl.endDate){
+      const ed=new Date(tmpl.endDate);
+      if(ed<endLimit)endLimit=ed;
+    }
+    let remainingCount=tmpl.endType==='count'?(tmpl.endCount||10)-doneCount:999;
+    // Generate occurrences
+    let cur=new Date(startDate);let generated=0;
+    while(cur<=endLimit&&remainingCount>0){
       const ds=cur.toISOString().split('T')[0];
       if(cur>=today&&!existingDates.has(ds)){
         const nt={...tmpl,
-          id:Date.now()+Math.random(),
+          id:Date.now()+Math.random()*1000,
           done:false,isTemplate:false,
           templateId:tmpl.id,
           created:Date.now(),
           date:ds
         };
-        tasks.push(nt);
-        saveTask(nt);
+        tasks.push(nt);saveTask(nt);
+        generated++;remainingCount--;
       }
       cur.setDate(cur.getDate()+days);
     }
@@ -587,9 +627,26 @@ function pickCat(prefix,el){
 function pickRecur(prefix,el){
   const pid=prefix==='a'?'aRecurPicker':'eRecurPicker';
   const cid=prefix==='a'?'aCustomBox':'eCustomBox';
+  const eid=prefix==='a'?'aEndBox':'eEndBox';
   document.querySelectorAll('#'+pid+' .pick-chip').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   document.getElementById(cid).classList.toggle('show',el.dataset.v==='custom');
+  document.getElementById(eid).style.display=el.dataset.v==='none'?'none':'block';
+}
+function pickEnd(prefix,el){
+  const pid=prefix==='a'?'aEndBox':'eEndBox';
+  document.querySelectorAll('#'+pid+' .pick-chip').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  const v=el.dataset.v;
+  document.getElementById(prefix+'EndCount').style.display=v==='count'?'block':'none';
+  document.getElementById(prefix+'EndDate').style.display=v==='date'?'block':'none';
+}
+function getEndVal(prefix){
+  const active=document.querySelector('#'+prefix+'EndBox .pick-chip.active');
+  if(!active||active.dataset.v==='never')return{endType:'never'};
+  if(active.dataset.v==='count')return{endType:'count',endCount:parseInt(document.getElementById(prefix+'EndCountVal').value)||10};
+  if(active.dataset.v==='date')return{endType:'date',endDate:document.getElementById(prefix+'EndDateVal').value};
+  return{endType:'never'};
 }
 function getPickerVal(pickerId){const a=document.querySelector('#'+pickerId+' .pick-chip.active');return a?a.dataset.v:'none';}
 
@@ -608,6 +665,7 @@ function addTask(){
     done:false,recur,
     customDays:recur==='custom'?parseInt(document.getElementById('aCustomDays').value)||4:null,
     isTemplate:isRecur,lastSpawn:isRecur?document.getElementById('aDate').value:null,
+    ...( isRecur ? getEndVal('a') : {} ),
     createdBy:myName,created:Date.now()
   };
   tasks.unshift(task);saveTask(task);
@@ -620,6 +678,10 @@ function addTask(){
   document.querySelectorAll('#aCatPicker .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v==='sonstiges'));
   document.querySelectorAll('#aRecurPicker .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v==='none'));
   document.getElementById('aCustomBox').classList.remove('show');
+  document.getElementById('aEndBox').style.display='none';
+  document.querySelectorAll('#aEndBox .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v==='never'));
+  document.getElementById('aEndCount').style.display='none';
+  document.getElementById('aEndDate').style.display='none';
   renderAll();document.getElementById('aTitle').focus();
 }
 
@@ -647,6 +709,13 @@ function openEdit(id){
   document.querySelectorAll('#eRecurPicker .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===recur));
   document.getElementById('eCustomDays').value=t.customDays||4;
   document.getElementById('eCustomBox').classList.toggle('show',recur==='custom');
+  document.getElementById('eEndBox').style.display=recur==='none'?'none':'block';
+  const endType=t.endType||'never';
+  document.querySelectorAll('#eEndBox .pick-chip').forEach(b=>b.classList.toggle('active',b.dataset.v===endType));
+  document.getElementById('eEndCount').style.display=endType==='count'?'block':'none';
+  document.getElementById('eEndDate').style.display=endType==='date'?'block':'none';
+  if(t.endCount)document.getElementById('eEndCountVal').value=t.endCount;
+  if(t.endDate)document.getElementById('eEndDateVal').value=t.endDate;
   document.getElementById('editOverlay').classList.add('open');
 }
 function saveEdit(){
@@ -659,6 +728,7 @@ function saveEdit(){
   t.cat=document.getElementById('eCat').value;t.who=document.getElementById('eWho').value.trim()||myName;
   t.recur=recur;t.customDays=recur==='custom'?parseInt(document.getElementById('eCustomDays').value)||4:null;
   t.isTemplate=recur!=='none';
+  if(t.isTemplate){const ev=getEndVal('e');t.endType=ev.endType;t.endCount=ev.endCount;t.endDate=ev.endDate;}
   saveTask(t);renderAll();closeOverlay('editOverlay');
 }
 
